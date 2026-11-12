@@ -21,7 +21,7 @@ type UpdatePDPContextResponse struct {
 	GGSNAddressForSignalling  *ie.IE
 	GGSNAddressForUserTraffic *ie.IE
 	ChargingGatewayAddress    *ie.IE
-	PrivateExtension          *ie.IE
+	PrivateExtensions         []*ie.IE
 	AdditionalIEs             []*ie.IE
 }
 
@@ -39,19 +39,47 @@ func NewUpdatePDPContextResponse(seq, label uint16, tid uint64, ies ...*ie.IE) *
 		}
 		switch i.Type {
 		case ie.Cause:
-			u.Cause = i
+			if u.Cause == nil {
+				u.Cause = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.QualityOfServiceProfile:
-			u.QoSProfile = i
+			if u.QoSProfile == nil {
+				u.QoSProfile = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.Recovery:
-			u.Recovery = i
+			if u.Recovery == nil {
+				u.Recovery = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelDataI:
-			u.FlowLabelDataI = i
+			if u.FlowLabelDataI == nil {
+				u.FlowLabelDataI = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelSignalling:
-			u.FlowLabelSignalling = i
+			if u.FlowLabelSignalling == nil {
+				u.FlowLabelSignalling = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.ChargingID:
-			u.ChargingID = i
+			if u.ChargingID == nil {
+				u.ChargingID = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.EndUserAddress:
-			u.EndUserAddress = i
+			if u.EndUserAddress == nil {
+				u.EndUserAddress = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.GSNAddress:
 			if u.GGSNAddressForSignalling == nil {
 				u.GGSNAddressForSignalling = i
@@ -59,9 +87,13 @@ func NewUpdatePDPContextResponse(seq, label uint16, tid uint64, ies ...*ie.IE) *
 				u.GGSNAddressForUserTraffic = i
 			}
 		case ie.ChargingGatewayAddress:
-			u.ChargingGatewayAddress = i
+			if u.ChargingGatewayAddress == nil {
+				u.ChargingGatewayAddress = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.PrivateExtension:
-			u.PrivateExtension = i
+			u.PrivateExtensions = append(u.PrivateExtensions, i)
 		default:
 			u.AdditionalIEs = append(u.AdditionalIEs, i)
 		}
@@ -73,6 +105,9 @@ func NewUpdatePDPContextResponse(seq, label uint16, tid uint64, ies ...*ie.IE) *
 
 // Marshal returns the byte sequence generated from a UpdatePDPContextResponse.
 func (u *UpdatePDPContextResponse) Marshal() ([]byte, error) {
+	if u == nil || u.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, u.MarshalLen())
 	if err := u.MarshalTo(b); err != nil {
 		return nil, err
@@ -83,97 +118,22 @@ func (u *UpdatePDPContextResponse) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (u *UpdatePDPContextResponse) MarshalTo(b []byte) error {
-	if u.Header.Payload != nil {
-		u.Header.Payload = nil
+	if u == nil || u.Header == nil {
+		return ErrInvalidLength
 	}
-	u.Header.Payload = make([]byte, u.MarshalLen()-u.Header.MarshalLen())
-
-	offset := 0
-	if ie := u.Cause; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.QoSProfile; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.Recovery; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelDataI; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelSignalling; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.ChargingID; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.EndUserAddress; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.GGSNAddressForSignalling; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.GGSNAddressForUserTraffic; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.ChargingGatewayAddress; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range u.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(u.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	u.Header.SetLength()
-	return u.Header.MarshalTo(b)
+	ies := []*ie.IE{u.Cause, u.QoSProfile, u.Recovery, u.FlowLabelDataI, u.FlowLabelSignalling, u.ChargingID, u.EndUserAddress, u.GGSNAddressForSignalling, u.GGSNAddressForUserTraffic, u.ChargingGatewayAddress}
+	ies = append(ies, u.PrivateExtensions...)
+	ies = append(ies, u.AdditionalIEs...)
+	return marshalIEs(u.Header, b, ies)
 }
 
 // ParseUpdatePDPContextResponse parses a given byte sequence as a UpdatePDPContextResponse.
 func ParseUpdatePDPContextResponse(b []byte) (*UpdatePDPContextResponse, error) {
 	u := &UpdatePDPContextResponse{}
 	if err := u.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return u, err
+		}
 		return nil, err
 	}
 	return u, nil
@@ -181,13 +141,17 @@ func ParseUpdatePDPContextResponse(b []byte) (*UpdatePDPContextResponse, error) 
 
 // UnmarshalBinary parses a given byte sequence as a UpdatePDPContextResponse.
 func (u *UpdatePDPContextResponse) UnmarshalBinary(b []byte) error {
+	if u == nil {
+		return ErrInvalidLength
+	}
+	*u = UpdatePDPContextResponse{}
 	var err error
 	u.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(u.Header.Payload) < 2 {
-		return nil
+	if u.Header.Type != MsgTypeUpdatePDPContextResponse {
+		return ErrInvalidMessageType
 	}
 
 	ies, err := ie.ParseMultiIEs(u.Header.Payload)
@@ -201,19 +165,47 @@ func (u *UpdatePDPContextResponse) UnmarshalBinary(b []byte) error {
 		}
 		switch i.Type {
 		case ie.Cause:
-			u.Cause = i
+			if u.Cause == nil {
+				u.Cause = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.QualityOfServiceProfile:
-			u.QoSProfile = i
+			if u.QoSProfile == nil {
+				u.QoSProfile = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.Recovery:
-			u.Recovery = i
+			if u.Recovery == nil {
+				u.Recovery = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelDataI:
-			u.FlowLabelDataI = i
+			if u.FlowLabelDataI == nil {
+				u.FlowLabelDataI = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelSignalling:
-			u.FlowLabelSignalling = i
+			if u.FlowLabelSignalling == nil {
+				u.FlowLabelSignalling = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.ChargingID:
-			u.ChargingID = i
+			if u.ChargingID == nil {
+				u.ChargingID = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.EndUserAddress:
-			u.EndUserAddress = i
+			if u.EndUserAddress == nil {
+				u.EndUserAddress = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.GSNAddress:
 			if u.GGSNAddressForSignalling == nil {
 				u.GGSNAddressForSignalling = i
@@ -221,66 +213,37 @@ func (u *UpdatePDPContextResponse) UnmarshalBinary(b []byte) error {
 				u.GGSNAddressForUserTraffic = i
 			}
 		case ie.ChargingGatewayAddress:
-			u.ChargingGatewayAddress = i
+			if u.ChargingGatewayAddress == nil {
+				u.ChargingGatewayAddress = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.PrivateExtension:
-			u.PrivateExtension = i
+			u.PrivateExtensions = append(u.PrivateExtensions, i)
 		default:
 			u.AdditionalIEs = append(u.AdditionalIEs, i)
 		}
 	}
 
-	return nil
+	return validateMandatory(u.Header.Type, u.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (u *UpdatePDPContextResponse) MarshalLen() int {
-	l := u.Header.MarshalLen() - len(u.Header.Payload)
-
-	if ie := u.Cause; ie != nil {
-		l += ie.MarshalLen()
+	if u == nil || u.Header == nil {
+		return 0
 	}
-	if ie := u.QoSProfile; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.Recovery; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelDataI; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelSignalling; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.ChargingID; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.EndUserAddress; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.GGSNAddressForSignalling; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.GGSNAddressForUserTraffic; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.ChargingGatewayAddress; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
-	}
-
-	for _, ie := range u.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
-	}
-	return l
+	ies := []*ie.IE{u.Cause, u.QoSProfile, u.Recovery, u.FlowLabelDataI, u.FlowLabelSignalling, u.ChargingID, u.EndUserAddress, u.GGSNAddressForSignalling, u.GGSNAddressForUserTraffic, u.ChargingGatewayAddress}
+	ies = append(ies, u.PrivateExtensions...)
+	ies = append(ies, u.AdditionalIEs...)
+	return messageLen(u.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (u *UpdatePDPContextResponse) SetLength() {
+	if u == nil || u.Header == nil {
+		return
+	}
 	u.Header.Length = uint16(u.MarshalLen() - 20)
 }
 
@@ -291,5 +254,8 @@ func (u *UpdatePDPContextResponse) MessageTypeName() string {
 
 // TID returns the TID in human-readable string.
 func (u *UpdatePDPContextResponse) TID() string {
+	if u == nil || u.Header == nil {
+		return ""
+	}
 	return u.tid()
 }

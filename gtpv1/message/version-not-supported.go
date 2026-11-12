@@ -33,6 +33,9 @@ func NewVersionNotSupported(teid uint32, seq uint16, ie ...*ie.IE) *VersionNotSu
 
 // Marshal returns the byte sequence generated from a VersionNotSupported.
 func (v *VersionNotSupported) Marshal() ([]byte, error) {
+	if v == nil || v.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, v.MarshalLen())
 	if err := v.MarshalTo(b); err != nil {
 		return nil, err
@@ -43,24 +46,12 @@ func (v *VersionNotSupported) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (v *VersionNotSupported) MarshalTo(b []byte) error {
-	if len(b) < v.MarshalLen() {
-		return ErrTooShortToMarshal
+	if v == nil || v.Header == nil {
+		return ErrInvalidLength
 	}
-	v.Header.Payload = make([]byte, v.MarshalLen()-v.Header.MarshalLen())
-
-	offset := 0
-	for _, ie := range v.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(v.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	v.Header.SetLength()
-	return v.Header.MarshalTo(b)
+	ies := []*ie.IE{}
+	ies = append(ies, v.AdditionalIEs...)
+	return marshalIEs(v.Header, b, ies)
 }
 
 // ParseVersionNotSupported decodes a given byte sequence as a VersionNotSupported.
@@ -74,13 +65,17 @@ func ParseVersionNotSupported(b []byte) (*VersionNotSupported, error) {
 
 // UnmarshalBinary decodes a given byte sequence as a VersionNotSupported.
 func (v *VersionNotSupported) UnmarshalBinary(b []byte) error {
+	if v == nil {
+		return ErrInvalidLength
+	}
+	*v = VersionNotSupported{}
 	var err error
 	v.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(v.Header.Payload) < 2 {
-		return nil
+	if v.Header.Type != MsgTypeVersionNotSupported {
+		return ErrInvalidMessageType
 	}
 
 	ie, err := ie.ParseMultiIEs(v.Header.Payload)
@@ -94,24 +89,24 @@ func (v *VersionNotSupported) UnmarshalBinary(b []byte) error {
 		}
 		v.AdditionalIEs = append(v.AdditionalIEs, i)
 	}
-	return nil
+	return validateMandatory(v.Header.Type, v.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (v *VersionNotSupported) MarshalLen() int {
-	l := v.Header.MarshalLen() - len(v.Header.Payload)
-
-	for _, ie := range v.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
+	if v == nil || v.Header == nil {
+		return 0
 	}
-	return l
+	ies := []*ie.IE{}
+	ies = append(ies, v.AdditionalIEs...)
+	return messageLen(v.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (v *VersionNotSupported) SetLength() {
+	if v == nil || v.Header == nil {
+		return
+	}
 	v.Length = uint16(v.MarshalLen() - 8)
 }
 
@@ -122,5 +117,8 @@ func (v *VersionNotSupported) MessageTypeName() string {
 
 // TEID returns the TEID in human-readable string.
 func (v *VersionNotSupported) TEID() uint32 {
+	if v == nil || v.Header == nil {
+		return 0
+	}
 	return v.Header.TEID
 }

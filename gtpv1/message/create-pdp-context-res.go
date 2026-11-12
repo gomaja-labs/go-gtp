@@ -37,7 +37,7 @@ type CreatePDPContextResponse struct {
 	APNAMBR                       *ie.IE
 	GGSNBackOffTime               *ie.IE
 	ExtendedCommonFlagsII         *ie.IE
-	PrivateExtension              *ie.IE
+	PrivateExtensions             []*ie.IE
 	AdditionalIEs                 []*ie.IE
 }
 
@@ -53,23 +53,59 @@ func NewCreatePDPContextResponse(teid uint32, seq uint16, ies ...*ie.IE) *Create
 		}
 		switch i.Type {
 		case ie.Cause:
-			c.Cause = i
+			if c.Cause == nil {
+				c.Cause = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ReorderingRequired:
-			c.ReorderingRequired = i
+			if c.ReorderingRequired == nil {
+				c.ReorderingRequired = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.Recovery:
-			c.Recovery = i
+			if c.Recovery == nil {
+				c.Recovery = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.TEIDDataI:
-			c.TEIDDataI = i
+			if c.TEIDDataI == nil {
+				c.TEIDDataI = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.TEIDCPlane:
-			c.TEIDCPlane = i
+			if c.TEIDCPlane == nil {
+				c.TEIDCPlane = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.NSAPI:
-			c.NSAPI = i
+			if c.NSAPI == nil {
+				c.NSAPI = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ChargingID:
-			c.ChargingID = i
+			if c.ChargingID == nil {
+				c.ChargingID = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.EndUserAddress:
-			c.EndUserAddress = i
+			if c.EndUserAddress == nil {
+				c.EndUserAddress = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ProtocolConfigurationOptions:
-			c.PCO = i
+			if c.PCO == nil {
+				c.PCO = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.GSNAddress:
 			if c.GGSNAddressForCPlane == nil {
 				c.GGSNAddressForCPlane = i
@@ -83,9 +119,17 @@ func NewCreatePDPContextResponse(teid uint32, seq uint16, ies ...*ie.IE) *Create
 				c.AltGGSNAddressForCPlane = i
 				continue
 			}
-			c.AltGGSNAddressForUserTraffic = i
+			if c.AltGGSNAddressForUserTraffic == nil {
+				c.AltGGSNAddressForUserTraffic = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.QoSProfile:
-			c.QoSProfile = i
+			if c.QoSProfile == nil {
+				c.QoSProfile = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ChargingGatewayAddress:
 			if c.ChargingGatewayAddress == nil {
 				c.ChargingGatewayAddress = i
@@ -93,27 +137,67 @@ func NewCreatePDPContextResponse(teid uint32, seq uint16, ies ...*ie.IE) *Create
 				c.AltChargingGatewayAddress = i
 			}
 		case ie.CommonFlags:
-			c.CommonFlags = i
+			if c.CommonFlags == nil {
+				c.CommonFlags = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.APNRestriction:
-			c.APNRestriction = i
+			if c.APNRestriction == nil {
+				c.APNRestriction = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.MSInfoChangeReportingAction:
-			c.MSInfoChangeReportingAction = i
+			if c.MSInfoChangeReportingAction == nil {
+				c.MSInfoChangeReportingAction = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.BearerControlMode:
-			c.BearerControlMode = i
+			if c.BearerControlMode == nil {
+				c.BearerControlMode = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.EvolvedAllocationRetentionPriorityI:
-			c.EvolvedARPI = i
+			if c.EvolvedARPI == nil {
+				c.EvolvedARPI = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ExtendedCommonFlags:
-			c.ExtendedCommonFlags = i
+			if c.ExtendedCommonFlags == nil {
+				c.ExtendedCommonFlags = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.CSGInformationReportingAction:
-			c.CSGInformationReportingAction = i
+			if c.CSGInformationReportingAction == nil {
+				c.CSGInformationReportingAction = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.AggregateMaximumBitRate:
-			c.APNAMBR = i
+			if c.APNAMBR == nil {
+				c.APNAMBR = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.GGSNBackOffTime:
-			c.GGSNBackOffTime = i
+			if c.GGSNBackOffTime == nil {
+				c.GGSNBackOffTime = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ExtendedCommonFlagsII:
-			c.ExtendedCommonFlagsII = i
+			if c.ExtendedCommonFlagsII == nil {
+				c.ExtendedCommonFlagsII = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.PrivateExtension:
-			c.PrivateExtension = i
+			c.PrivateExtensions = append(c.PrivateExtensions, i)
 		default:
 			c.AdditionalIEs = append(c.AdditionalIEs, i)
 		}
@@ -125,6 +209,9 @@ func NewCreatePDPContextResponse(teid uint32, seq uint16, ies ...*ie.IE) *Create
 
 // Marshal returns the byte sequence generated from a CreatePDPContextResponse.
 func (c *CreatePDPContextResponse) Marshal() ([]byte, error) {
+	if c == nil || c.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, c.MarshalLen())
 	if err := c.MarshalTo(b); err != nil {
 		return nil, err
@@ -135,193 +222,22 @@ func (c *CreatePDPContextResponse) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (c *CreatePDPContextResponse) MarshalTo(b []byte) error {
-	if len(b) < c.MarshalLen() {
-		return ErrTooShortToMarshal
+	if c == nil || c.Header == nil {
+		return ErrInvalidLength
 	}
-	c.Header.Payload = make([]byte, c.MarshalLen()-c.Header.MarshalLen())
-
-	offset := 0
-	if ie := c.Cause; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.ReorderingRequired; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.Recovery; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.TEIDDataI; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.TEIDCPlane; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.NSAPI; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.ChargingID; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.EndUserAddress; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PCO; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.GGSNAddressForCPlane; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.GGSNAddressForUserTraffic; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.AltGGSNAddressForCPlane; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.AltGGSNAddressForUserTraffic; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.QoSProfile; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.ChargingGatewayAddress; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.AltChargingGatewayAddress; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.CommonFlags; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.APNRestriction; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.MSInfoChangeReportingAction; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.BearerControlMode; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.EvolvedARPI; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.ExtendedCommonFlags; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.CSGInformationReportingAction; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.APNAMBR; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.GGSNBackOffTime; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.ExtendedCommonFlagsII; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range c.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(c.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	c.Header.SetLength()
-	return c.Header.MarshalTo(b)
+	ies := []*ie.IE{c.Cause, c.ReorderingRequired, c.Recovery, c.TEIDDataI, c.TEIDCPlane, c.NSAPI, c.ChargingID, c.EndUserAddress, c.PCO, c.GGSNAddressForCPlane, c.GGSNAddressForUserTraffic, c.AltGGSNAddressForCPlane, c.AltGGSNAddressForUserTraffic, c.QoSProfile, c.ChargingGatewayAddress, c.AltChargingGatewayAddress, c.CommonFlags, c.APNRestriction, c.MSInfoChangeReportingAction, c.BearerControlMode, c.EvolvedARPI, c.ExtendedCommonFlags, c.CSGInformationReportingAction, c.APNAMBR, c.GGSNBackOffTime, c.ExtendedCommonFlagsII}
+	ies = append(ies, c.PrivateExtensions...)
+	ies = append(ies, c.AdditionalIEs...)
+	return marshalIEs(c.Header, b, ies)
 }
 
 // ParseCreatePDPContextResponse decodes a given byte sequence as a CreatePDPContextResponse.
 func ParseCreatePDPContextResponse(b []byte) (*CreatePDPContextResponse, error) {
 	c := &CreatePDPContextResponse{}
 	if err := c.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return c, err
+		}
 		return nil, err
 	}
 	return c, nil
@@ -329,13 +245,17 @@ func ParseCreatePDPContextResponse(b []byte) (*CreatePDPContextResponse, error) 
 
 // UnmarshalBinary decodes a given byte sequence as a CreatePDPContextResponse.
 func (c *CreatePDPContextResponse) UnmarshalBinary(b []byte) error {
+	if c == nil {
+		return ErrInvalidLength
+	}
+	*c = CreatePDPContextResponse{}
 	var err error
 	c.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(c.Header.Payload) < 2 {
-		return nil
+	if c.Header.Type != MsgTypeCreatePDPContextResponse {
+		return ErrInvalidMessageType
 	}
 
 	ies, err := ie.ParseMultiIEs(c.Header.Payload)
@@ -349,23 +269,59 @@ func (c *CreatePDPContextResponse) UnmarshalBinary(b []byte) error {
 		}
 		switch i.Type {
 		case ie.Cause:
-			c.Cause = i
+			if c.Cause == nil {
+				c.Cause = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ReorderingRequired:
-			c.ReorderingRequired = i
+			if c.ReorderingRequired == nil {
+				c.ReorderingRequired = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.Recovery:
-			c.Recovery = i
+			if c.Recovery == nil {
+				c.Recovery = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.TEIDDataI:
-			c.TEIDDataI = i
+			if c.TEIDDataI == nil {
+				c.TEIDDataI = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.TEIDCPlane:
-			c.TEIDCPlane = i
+			if c.TEIDCPlane == nil {
+				c.TEIDCPlane = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.NSAPI:
-			c.NSAPI = i
+			if c.NSAPI == nil {
+				c.NSAPI = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ChargingID:
-			c.ChargingID = i
+			if c.ChargingID == nil {
+				c.ChargingID = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.EndUserAddress:
-			c.EndUserAddress = i
+			if c.EndUserAddress == nil {
+				c.EndUserAddress = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ProtocolConfigurationOptions:
-			c.PCO = i
+			if c.PCO == nil {
+				c.PCO = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.GSNAddress:
 			if c.GGSNAddressForCPlane == nil {
 				c.GGSNAddressForCPlane = i
@@ -379,142 +335,113 @@ func (c *CreatePDPContextResponse) UnmarshalBinary(b []byte) error {
 				c.AltGGSNAddressForCPlane = i
 				continue
 			}
-			c.AltGGSNAddressForUserTraffic = i
+			if c.AltGGSNAddressForUserTraffic == nil {
+				c.AltGGSNAddressForUserTraffic = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.QoSProfile:
-			c.QoSProfile = i
+			if c.QoSProfile == nil {
+				c.QoSProfile = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ChargingGatewayAddress:
 			if c.ChargingGatewayAddress == nil {
 				c.ChargingGatewayAddress = i
 				continue
 			}
-			c.AltChargingGatewayAddress = i
+			if c.AltChargingGatewayAddress == nil {
+				c.AltChargingGatewayAddress = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.CommonFlags:
-			c.CommonFlags = i
+			if c.CommonFlags == nil {
+				c.CommonFlags = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.APNRestriction:
-			c.APNRestriction = i
+			if c.APNRestriction == nil {
+				c.APNRestriction = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.MSInfoChangeReportingAction:
-			c.MSInfoChangeReportingAction = i
+			if c.MSInfoChangeReportingAction == nil {
+				c.MSInfoChangeReportingAction = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.BearerControlMode:
-			c.BearerControlMode = i
+			if c.BearerControlMode == nil {
+				c.BearerControlMode = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.EvolvedAllocationRetentionPriorityI:
-			c.EvolvedARPI = i
+			if c.EvolvedARPI == nil {
+				c.EvolvedARPI = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ExtendedCommonFlags:
-			c.ExtendedCommonFlags = i
+			if c.ExtendedCommonFlags == nil {
+				c.ExtendedCommonFlags = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.CSGInformationReportingAction:
-			c.CSGInformationReportingAction = i
+			if c.CSGInformationReportingAction == nil {
+				c.CSGInformationReportingAction = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.AggregateMaximumBitRate:
-			c.APNAMBR = i
+			if c.APNAMBR == nil {
+				c.APNAMBR = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.GGSNBackOffTime:
-			c.GGSNBackOffTime = i
+			if c.GGSNBackOffTime == nil {
+				c.GGSNBackOffTime = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.ExtendedCommonFlagsII:
-			c.ExtendedCommonFlagsII = i
+			if c.ExtendedCommonFlagsII == nil {
+				c.ExtendedCommonFlagsII = i
+			} else {
+				c.AdditionalIEs = append(c.AdditionalIEs, i)
+			}
 		case ie.PrivateExtension:
-			c.PrivateExtension = i
+			c.PrivateExtensions = append(c.PrivateExtensions, i)
 		default:
 			c.AdditionalIEs = append(c.AdditionalIEs, i)
 		}
 	}
 
-	return nil
+	return validateMandatory(c.Header.Type, c.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (c *CreatePDPContextResponse) MarshalLen() int {
-	l := c.Header.MarshalLen() - len(c.Header.Payload)
-
-	if ie := c.Cause; ie != nil {
-		l += ie.MarshalLen()
+	if c == nil || c.Header == nil {
+		return 0
 	}
-	if ie := c.ReorderingRequired; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.Recovery; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.TEIDDataI; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.TEIDCPlane; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.NSAPI; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.ChargingID; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.EndUserAddress; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.PCO; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.GGSNAddressForCPlane; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.GGSNAddressForUserTraffic; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.AltGGSNAddressForCPlane; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.AltGGSNAddressForUserTraffic; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.QoSProfile; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.ChargingGatewayAddress; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.AltChargingGatewayAddress; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.CommonFlags; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.APNRestriction; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.MSInfoChangeReportingAction; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.BearerControlMode; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.EvolvedARPI; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.ExtendedCommonFlags; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.CSGInformationReportingAction; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.APNAMBR; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.GGSNBackOffTime; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.ExtendedCommonFlagsII; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := c.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
-	}
-
-	for _, ie := range c.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
-	}
-	return l
+	ies := []*ie.IE{c.Cause, c.ReorderingRequired, c.Recovery, c.TEIDDataI, c.TEIDCPlane, c.NSAPI, c.ChargingID, c.EndUserAddress, c.PCO, c.GGSNAddressForCPlane, c.GGSNAddressForUserTraffic, c.AltGGSNAddressForCPlane, c.AltGGSNAddressForUserTraffic, c.QoSProfile, c.ChargingGatewayAddress, c.AltChargingGatewayAddress, c.CommonFlags, c.APNRestriction, c.MSInfoChangeReportingAction, c.BearerControlMode, c.EvolvedARPI, c.ExtendedCommonFlags, c.CSGInformationReportingAction, c.APNAMBR, c.GGSNBackOffTime, c.ExtendedCommonFlagsII}
+	ies = append(ies, c.PrivateExtensions...)
+	ies = append(ies, c.AdditionalIEs...)
+	return messageLen(c.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (c *CreatePDPContextResponse) SetLength() {
+	if c == nil || c.Header == nil {
+		return
+	}
 	c.Length = uint16(c.MarshalLen() - 8)
 }
 
@@ -525,5 +452,8 @@ func (c *CreatePDPContextResponse) MessageTypeName() string {
 
 // TEID returns the TEID in human-readable string.
 func (c *CreatePDPContextResponse) TEID() uint32 {
+	if c == nil || c.Header == nil {
+		return 0
+	}
 	return c.Header.TEID
 }

@@ -19,7 +19,7 @@ type UpdatePDPContextRequest struct {
 	EndUserAddress            *ie.IE
 	SGSNAddressForSignalling  *ie.IE
 	SGSNAddressForUserTraffic *ie.IE
-	PrivateExtension          *ie.IE
+	PrivateExtensions         []*ie.IE
 	AdditionalIEs             []*ie.IE
 }
 
@@ -37,17 +37,41 @@ func NewUpdatePDPContextRequest(seq, label uint16, tid uint64, ies ...*ie.IE) *U
 		}
 		switch i.Type {
 		case ie.RouteingAreaIdentity:
-			u.RAI = i
+			if u.RAI == nil {
+				u.RAI = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.QualityOfServiceProfile:
-			u.QoSProfile = i
+			if u.QoSProfile == nil {
+				u.QoSProfile = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.Recovery:
-			u.Recovery = i
+			if u.Recovery == nil {
+				u.Recovery = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelDataI:
-			u.FlowLabelDataI = i
+			if u.FlowLabelDataI == nil {
+				u.FlowLabelDataI = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelSignalling:
-			u.FlowLabelSignalling = i
+			if u.FlowLabelSignalling == nil {
+				u.FlowLabelSignalling = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.EndUserAddress:
-			u.EndUserAddress = i
+			if u.EndUserAddress == nil {
+				u.EndUserAddress = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.GSNAddress:
 			if u.SGSNAddressForSignalling == nil {
 				u.SGSNAddressForSignalling = i
@@ -55,7 +79,7 @@ func NewUpdatePDPContextRequest(seq, label uint16, tid uint64, ies ...*ie.IE) *U
 				u.SGSNAddressForUserTraffic = i
 			}
 		case ie.PrivateExtension:
-			u.PrivateExtension = i
+			u.PrivateExtensions = append(u.PrivateExtensions, i)
 		default:
 			u.AdditionalIEs = append(u.AdditionalIEs, i)
 		}
@@ -67,6 +91,9 @@ func NewUpdatePDPContextRequest(seq, label uint16, tid uint64, ies ...*ie.IE) *U
 
 // Marshal returns the byte sequence generated from a UpdatePDPContextRequest.
 func (u *UpdatePDPContextRequest) Marshal() ([]byte, error) {
+	if u == nil || u.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, u.MarshalLen())
 	if err := u.MarshalTo(b); err != nil {
 		return nil, err
@@ -77,85 +104,22 @@ func (u *UpdatePDPContextRequest) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (u *UpdatePDPContextRequest) MarshalTo(b []byte) error {
-	if u.Header.Payload != nil {
-		u.Header.Payload = nil
+	if u == nil || u.Header == nil {
+		return ErrInvalidLength
 	}
-	u.Header.Payload = make([]byte, u.MarshalLen()-u.Header.MarshalLen())
-
-	offset := 0
-	if ie := u.RAI; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.QoSProfile; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.Recovery; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelDataI; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelSignalling; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.EndUserAddress; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.SGSNAddressForSignalling; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.SGSNAddressForUserTraffic; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := u.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(u.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range u.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(u.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	u.Header.SetLength()
-	return u.Header.MarshalTo(b)
+	ies := []*ie.IE{u.RAI, u.QoSProfile, u.Recovery, u.FlowLabelDataI, u.FlowLabelSignalling, u.EndUserAddress, u.SGSNAddressForSignalling, u.SGSNAddressForUserTraffic}
+	ies = append(ies, u.PrivateExtensions...)
+	ies = append(ies, u.AdditionalIEs...)
+	return marshalIEs(u.Header, b, ies)
 }
 
 // ParseUpdatePDPContextRequest parses a given byte sequence as a UpdatePDPContextRequest.
 func ParseUpdatePDPContextRequest(b []byte) (*UpdatePDPContextRequest, error) {
 	u := &UpdatePDPContextRequest{}
 	if err := u.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return u, err
+		}
 		return nil, err
 	}
 	return u, nil
@@ -163,13 +127,17 @@ func ParseUpdatePDPContextRequest(b []byte) (*UpdatePDPContextRequest, error) {
 
 // UnmarshalBinary parses a given byte sequence as a UpdatePDPContextRequest.
 func (u *UpdatePDPContextRequest) UnmarshalBinary(b []byte) error {
+	if u == nil {
+		return ErrInvalidLength
+	}
+	*u = UpdatePDPContextRequest{}
 	var err error
 	u.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(u.Header.Payload) < 2 {
-		return nil
+	if u.Header.Type != MsgTypeUpdatePDPContextRequest {
+		return ErrInvalidMessageType
 	}
 
 	ies, err := ie.ParseMultiIEs(u.Header.Payload)
@@ -183,17 +151,41 @@ func (u *UpdatePDPContextRequest) UnmarshalBinary(b []byte) error {
 		}
 		switch i.Type {
 		case ie.RouteingAreaIdentity:
-			u.RAI = i
+			if u.RAI == nil {
+				u.RAI = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.QualityOfServiceProfile:
-			u.QoSProfile = i
+			if u.QoSProfile == nil {
+				u.QoSProfile = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.Recovery:
-			u.Recovery = i
+			if u.Recovery == nil {
+				u.Recovery = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelDataI:
-			u.FlowLabelDataI = i
+			if u.FlowLabelDataI == nil {
+				u.FlowLabelDataI = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.FlowLabelSignalling:
-			u.FlowLabelSignalling = i
+			if u.FlowLabelSignalling == nil {
+				u.FlowLabelSignalling = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.EndUserAddress:
-			u.EndUserAddress = i
+			if u.EndUserAddress == nil {
+				u.EndUserAddress = i
+			} else {
+				u.AdditionalIEs = append(u.AdditionalIEs, i)
+			}
 		case ie.GSNAddress:
 			if u.SGSNAddressForSignalling == nil {
 				u.SGSNAddressForSignalling = i
@@ -201,58 +193,31 @@ func (u *UpdatePDPContextRequest) UnmarshalBinary(b []byte) error {
 				u.SGSNAddressForUserTraffic = i
 			}
 		case ie.PrivateExtension:
-			u.PrivateExtension = i
+			u.PrivateExtensions = append(u.PrivateExtensions, i)
 		default:
 			u.AdditionalIEs = append(u.AdditionalIEs, i)
 		}
 	}
 
-	return nil
+	return validateMandatory(u.Header.Type, u.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (u *UpdatePDPContextRequest) MarshalLen() int {
-	l := u.Header.MarshalLen() - len(u.Header.Payload)
-
-	if ie := u.RAI; ie != nil {
-		l += ie.MarshalLen()
+	if u == nil || u.Header == nil {
+		return 0
 	}
-	if ie := u.QoSProfile; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.Recovery; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelDataI; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.FlowLabelSignalling; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.EndUserAddress; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.SGSNAddressForSignalling; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.SGSNAddressForUserTraffic; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := u.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
-	}
-
-	for _, ie := range u.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
-	}
-	return l
+	ies := []*ie.IE{u.RAI, u.QoSProfile, u.Recovery, u.FlowLabelDataI, u.FlowLabelSignalling, u.EndUserAddress, u.SGSNAddressForSignalling, u.SGSNAddressForUserTraffic}
+	ies = append(ies, u.PrivateExtensions...)
+	ies = append(ies, u.AdditionalIEs...)
+	return messageLen(u.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (u *UpdatePDPContextRequest) SetLength() {
+	if u == nil || u.Header == nil {
+		return
+	}
 	u.Header.Length = uint16(u.MarshalLen() - 20)
 }
 
@@ -263,5 +228,8 @@ func (u *UpdatePDPContextRequest) MessageTypeName() string {
 
 // TID returns the TID in human-readable string.
 func (u *UpdatePDPContextRequest) TID() string {
+	if u == nil || u.Header == nil {
+		return ""
+	}
 	return u.tid()
 }

@@ -12,6 +12,10 @@ import (
 
 // NewMSISDN creates a new MSISDN IE.
 func NewMSISDN(msisdn string) *IE {
+	// TS 23.003 §3.3: at most 15 decimal digits.
+	if len(msisdn) == 0 || len(msisdn) > 15 {
+		return newErrorIE(MSISDN, ErrInvalidLength)
+	}
 	i, err := utils.EncodeBCDDigits("19" + msisdn)
 	if err != nil {
 		return newErrorIE(MSISDN, err)

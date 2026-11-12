@@ -16,6 +16,9 @@ func NewFlowLabelDataI(label uint16) *IE {
 
 // FlowLabelDataI returns FlowLabelDataI if type matches.
 func (i *IE) FlowLabelDataI() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != FlowLabelDataI {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -40,6 +43,9 @@ func NewFlowLabelSignalling(label uint16) *IE {
 
 // FlowLabelSignalling returns FlowLabelSignalling if type matches.
 func (i *IE) FlowLabelSignalling() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != FlowLabelSignalling {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -59,6 +65,9 @@ func (i *IE) MustFlowLabelSignalling() uint16 {
 
 // NewFlowLabelDataII creates a new FlowLabelDataII IE.
 func NewFlowLabelDataII(nsapi uint8, label uint16) *IE {
+	if nsapi > 15 {
+		return newErrorIE(FlowLabelDataII, ErrMalformed)
+	}
 	i := New(FlowLabelDataII, make([]byte, 3))
 	i.Payload[0] = nsapi | 0xf0
 	binary.BigEndian.PutUint16(i.Payload[1:3], label)
@@ -67,6 +76,9 @@ func NewFlowLabelDataII(nsapi uint8, label uint16) *IE {
 
 // FlowLabelDataII returns FlowLabelDataII if type matches.
 func (i *IE) FlowLabelDataII() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != FlowLabelDataII {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -82,6 +94,9 @@ func (i *IE) MustFlowLabelDataII() []byte {
 
 // NSAPI returns NSAPI in uint8 if type matches.
 func (i *IE) NSAPI() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if len(i.Payload) == 0 {
 		return 0, io.ErrUnexpectedEOF
 	}
@@ -103,6 +118,9 @@ func (i *IE) MustNSAPI() uint8 {
 
 // FlowLabelData returns FlowLabelData in uint16 if type matches.
 func (i *IE) FlowLabelData() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if len(i.Payload) < 2 {
 		return 0, io.ErrUnexpectedEOF
 	}

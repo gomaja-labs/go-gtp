@@ -10,6 +10,9 @@ import "io"
 //
 // Note: each flag should be set in 1 or 0.
 func NewCommonFlags(dualAddr, upgradeQoS, nrsn, noQoS, mbmsCount, ranReady, mbmsService, prohibitComp int) *IE {
+	if dualAddr < 0 || dualAddr > 1 || upgradeQoS < 0 || upgradeQoS > 1 || nrsn < 0 || nrsn > 1 || noQoS < 0 || noQoS > 1 || mbmsCount < 0 || mbmsCount > 1 || ranReady < 0 || ranReady > 1 || mbmsService < 0 || mbmsService > 1 || prohibitComp < 0 || prohibitComp > 1 {
+		return newErrorIE(CommonFlags, ErrMalformed)
+	}
 	return New(
 		CommonFlags,
 		[]byte{uint8(
@@ -20,6 +23,9 @@ func NewCommonFlags(dualAddr, upgradeQoS, nrsn, noQoS, mbmsCount, ranReady, mbms
 
 // CommonFlags returns CommonFlags value if type matches.
 func (i *IE) CommonFlags() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != CommonFlags {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -39,40 +45,64 @@ func (i *IE) MustCommonFlags() uint8 {
 
 // IsDualAddressBearer checks if DualAddressBearer flag exists in CommonFlags.
 func (i *IE) IsDualAddressBearer() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustCommonFlags() >> 7) & 0x01) != 0
 }
 
 // IsUpgradeQoSSupported checks if UpgradeQoSSupported flag exists in CommonFlags.
 func (i *IE) IsUpgradeQoSSupported() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustCommonFlags() >> 6) & 0x01) != 0
 }
 
 // IsNRSN checks if NRSN flag exists in CommonFlags.
 func (i *IE) IsNRSN() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustCommonFlags() >> 5) & 0x01) != 0
 }
 
 // IsNoQoSNegotiation checks if NoQoSNegotiation flag exists in CommonFlags.
 func (i *IE) IsNoQoSNegotiation() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustCommonFlags() >> 4) & 0x01) != 0
 }
 
 // IsMBMSCountingInformation checks if MBMSCountingInformation flag exists in CommonFlags.
 func (i *IE) IsMBMSCountingInformation() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustCommonFlags() >> 3) & 0x01) != 0
 }
 
 // IsRANProceduresReady checks if RANProceduresReady flag exists in CommonFlags.
 func (i *IE) IsRANProceduresReady() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustCommonFlags() >> 2) & 0x01) != 0
 }
 
 // IsMBMSServiceType checks if MBMSServiceType flag exists in CommonFlags.
 func (i *IE) IsMBMSServiceType() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustCommonFlags() >> 1) & 0x01) != 0
 }
 
 // IsProhibitPayloadCompression checks if ProhibitPayloadCompression flag exists in CommonFlags.
 func (i *IE) IsProhibitPayloadCompression() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return (i.MustCommonFlags() & 0x01) != 0
 }

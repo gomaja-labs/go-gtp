@@ -35,6 +35,9 @@ func NewTPDUWithExtentionHeader(teid uint32, payload []byte, extHdrs ...*Extensi
 
 // Marshal returns the byte sequence generated from a TPDU.
 func (t *TPDU) Marshal() ([]byte, error) {
+	if t == nil || t.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, t.MarshalLen())
 	if err := t.MarshalTo(b); err != nil {
 		return nil, err
@@ -45,6 +48,9 @@ func (t *TPDU) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (t *TPDU) MarshalTo(b []byte) error {
+	if t == nil || t.Header == nil {
+		return ErrInvalidLength
+	}
 	if len(b) < t.MarshalLen() {
 		return ErrTooShortToMarshal
 	}
@@ -64,10 +70,17 @@ func ParseTPDU(b []byte) (*TPDU, error) {
 
 // UnmarshalBinary decodes a given byte sequence as a TPDU.
 func (t *TPDU) UnmarshalBinary(b []byte) error {
+	if t == nil {
+		return ErrInvalidLength
+	}
+	*t = TPDU{}
 	var err error
 	t.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
+	}
+	if t.Header.Type != MsgTypeTPDU {
+		return ErrInvalidMessageType
 	}
 
 	return nil
@@ -75,11 +88,17 @@ func (t *TPDU) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of Data.
 func (t *TPDU) MarshalLen() int {
+	if t == nil || t.Header == nil {
+		return 0
+	}
 	return t.Header.MarshalLen()
 }
 
 // SetLength sets the length in Length field.
 func (t *TPDU) SetLength() {
+	if t == nil || t.Header == nil {
+		return
+	}
 	t.Header.SetLength()
 }
 
@@ -90,10 +109,16 @@ func (t *TPDU) MessageTypeName() string {
 
 // TEID returns the TEID in human-readable string.
 func (t *TPDU) TEID() uint32 {
+	if t == nil || t.Header == nil {
+		return 0
+	}
 	return t.Header.TEID
 }
 
 // Decapsulate returns payload as raw []byte.
 func (t *TPDU) Decapsulate() []byte {
+	if t == nil || t.Header == nil {
+		return nil
+	}
 	return t.Header.Payload
 }

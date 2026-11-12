@@ -8,6 +8,10 @@ import "io"
 
 // NewQualityOfServiceProfile creates a new QualityOfServiceProfile IE.
 func NewQualityOfServiceProfile(delay, reliability, peak, precedence, mean uint8) *IE {
+	// GSM 09.60 §7.9.6: validate field widths before packing.
+	if delay > 7 || reliability > 7 || peak > 15 || precedence > 7 || mean > 31 {
+		return newErrorIE(QualityOfServiceProfile, ErrMalformed)
+	}
 	i := New(QualityOfServiceProfile, make([]byte, 3))
 	i.Payload[0] = ((delay & 0x07) << 3) | (reliability & 0x07)
 	i.Payload[1] = ((peak & 0x0f) << 4) | (precedence & 0x07)
@@ -18,6 +22,9 @@ func NewQualityOfServiceProfile(delay, reliability, peak, precedence, mean uint8
 
 // QualityOfServiceProfile returns QualityOfServiceProfile if type matches.
 func (i *IE) QualityOfServiceProfile() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != QualityOfServiceProfile {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -33,6 +40,9 @@ func (i *IE) MustQualityOfServiceProfile() []byte {
 
 // QoSDelay returns QoS Delay value in uint8 if type matches.
 func (i *IE) QoSDelay() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != QualityOfServiceProfile {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -40,7 +50,8 @@ func (i *IE) QoSDelay() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return i.Payload[0] & 0x38, nil
+	// GSM 09.60 §7.9.6: return field values after removing their shifts.
+	return (i.Payload[0] >> 3) & 7, nil
 }
 
 // MustQoSDelay returns QoSDelay in uint8 if type matches.
@@ -52,6 +63,9 @@ func (i *IE) MustQoSDelay() uint8 {
 
 // QoSReliability returns QoS Reliability value in uint8 if type matches.
 func (i *IE) QoSReliability() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != QualityOfServiceProfile {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -71,6 +85,9 @@ func (i *IE) MustQoSReliability() uint8 {
 
 // QoSPeak returns QoS Peak value in uint8 if type matches.
 func (i *IE) QoSPeak() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != QualityOfServiceProfile {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -78,7 +95,7 @@ func (i *IE) QoSPeak() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return i.Payload[1] & 0xf0, nil
+	return i.Payload[1] >> 4, nil
 }
 
 // MustQoSPeak returns QoSPeak in uint8 if type matches.
@@ -90,6 +107,9 @@ func (i *IE) MustQoSPeak() uint8 {
 
 // QoSPrecedence returns QoS Precedence value in uint8 if type matches.
 func (i *IE) QoSPrecedence() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != QualityOfServiceProfile {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -109,6 +129,9 @@ func (i *IE) MustQoSPrecedence() uint8 {
 
 // QoSMean returns QoS Mean value in uint8 if type matches.
 func (i *IE) QoSMean() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != QualityOfServiceProfile {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -116,7 +139,7 @@ func (i *IE) QoSMean() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return i.Payload[2] & 0x0f, nil
+	return i.Payload[2] & 0x1f, nil
 }
 
 // MustQoSMean returns QoSMean in uint8 if type matches.

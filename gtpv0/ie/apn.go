@@ -5,54 +5,59 @@
 package ie
 
 import (
-	"io"
+	"github.com/gomaja-labs/go-gtp/utils"
 	"strings"
 )
 
-// NewAccessPointName creates a new AccessPointName IE.
+// NewAccessPointName creates a validated APN.
 func NewAccessPointName(apn string) *IE {
-	i := New(AccessPointName, make([]byte, len(apn)+1))
-	var offset = 0
-	for label := range strings.SplitSeq(apn, ".") {
-		l := len(label)
-		i.Payload[offset] = uint8(l)
-		copy(i.Payload[offset+1:], label)
-		offset += l + 1
+	// TS 23.003 §9.1: at most 100 encoded octets, no empty or root label.
+	if len(apn) == 0 || strings.HasSuffix(apn, ".") {
+		return newErrorIE(AccessPointName, ErrMalformed)
 	}
-
-	return i
+	if err := validateAPNName(apn); err != nil {
+		return newErrorIE(AccessPointName, err)
+	}
+	b, err := utils.EncodeFQDN(apn)
+	if err != nil {
+		return newErrorIE(AccessPointName, err)
+	}
+	if len(b) > 100 {
+		return newErrorIE(AccessPointName, ErrInvalidLength)
+	}
+	return New(AccessPointName, b)
 }
 
-// AccessPointName returns AccessPointName in string if type of IE matches.
+// AccessPointName returns the decoded APN.
 func (i *IE) AccessPointName() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != AccessPointName {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
-	if len(i.Payload) == 0 {
-		return "", io.ErrUnexpectedEOF
-	}
-
-	var (
-		apn    []string
-		offset int
-	)
-
-	max := len(i.Payload)
-	for offset < max {
-		l := int(i.Payload[offset])
-		if offset+l+1 >= max {
-			return "", io.ErrUnexpectedEOF
-		}
-		apn = append(apn, string(i.Payload[offset+1:offset+l+1]))
-		offset += l + 1
-	}
-
-	return strings.Join(apn, "."), nil
+	return utils.DecodeFQDN(i.Payload)
 }
 
-// MustAccessPointName returns AccessPointName in string if type matches.
-// This should only be used if it is assured to have the value.
-func (i *IE) MustAccessPointName() string {
-	v, _ := i.AccessPointName()
-	return v
+// MustAccessPointName returns the APN, or an empty string on error.
+func (i *IE) MustAccessPointName() string { v, _ := i.AccessPointName(); return v }
+
+func validateAPNName(name string) error {
+	// TS 23.003 §9.1: ASCII letters, digits and interior hyphens only.
+	for label := range strings.SplitSeq(name, ".") {
+		if len(label) == 0 || len(label) > 63 {
+			return ErrInvalidLength
+		}
+		for n := range len(label) {
+			c := label[n]
+			if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+				continue
+			}
+			if c == '-' && n > 0 && n < len(label)-1 {
+				continue
+			}
+			return ErrMalformed
+		}
+	}
+	return nil
 }

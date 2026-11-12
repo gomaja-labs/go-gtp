@@ -4,6 +4,19 @@
 
 /*
 Package message provides encoding/decoding feature of GTPv1 protocol.
+
+Decoding rejects framing errors. Incorrect optional and unexpected IEs are
+retained in their named field or AdditionalIEs; Err and typed accessors report
+content errors. Applications must treat these IEs as absent (TS 29.060
+§§11.1.8, 11.1.11, 11.1.13; GSM 09.60 §§10.1.8, 10.1.11, 10.1.13).
+Incorrect mandatory values return the decoded message and an InvalidIEError,
+so callers can respond with Mandatory IE incorrect. Conditional presence that
+depends on procedure state must be checked by the caller. Encoding validates
+all supplied IEs, including optional and unexpected ones.
+
+PDU Session Container reception accepts unknown Future Extension data while
+checking the lengths of known fields (TS 38.415 §5.5.1). Sending retains strict
+layout validation.
 */
 package message
 
@@ -73,11 +86,12 @@ const (
 	_
 	_
 	_
-	MsgTypeIdentificationRequest // 48
-	MsgTypeIdentificationResponse
-	MsgTypeSGSNContextRequest
-	MsgTypeSGSNContextResponse
-	MsgTypeSGSNContextAcknowledge
+	// TS 29.060 §7.1 Table 1: mobility messages start at type 48.
+	MsgTypeIdentificationRequest      uint8 = 48
+	MsgTypeIdentificationResponse     uint8 = 49
+	MsgTypeSGSNContextRequest         uint8 = 50
+	MsgTypeSGSNContextResponse        uint8 = 51
+	MsgTypeSGSNContextAcknowledge     uint8 = 52
 	MsgTypeDataRecordTransferRequest  uint8 = 240
 	MsgTypeDataRecordTransferResponse uint8 = 241
 	MsgTypeEndMarker                  uint8 = 254
@@ -86,6 +100,7 @@ const (
 
 // Message is an interface that defines Message message.
 type Message interface {
+	GetHeader() *Header
 	MarshalTo([]byte) error
 	UnmarshalBinary(b []byte) error
 	MarshalLen() int
@@ -205,6 +220,9 @@ func Parse(b []byte) (Message, error) {
 	}
 
 	if err := m.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return m, err
+		}
 		return nil, err
 	}
 	return m, nil

@@ -12,11 +12,20 @@ import (
 
 // NewIMSI creates a new IMSI IE.
 func NewIMSI(imsi string) *IE {
+	// TS 29.060 §7.7.2; GSM 09.60 §7.9.2: eight octets, unused digits are F.
+	if len(imsi) == 0 || len(imsi) > 15 {
+		return newErrorIE(IMSI, ErrInvalidLength)
+	}
 	i, err := utils.EncodeBCDDigits(imsi)
 	if err != nil {
 		return newErrorIE(IMSI, err)
 	}
-	return New(IMSI, i)
+	p := make([]byte, 8)
+	for n := range p {
+		p[n] = 0xff
+	}
+	copy(p, i)
+	return New(IMSI, p)
 }
 
 // IMSI returns IMSI value in string if type matches.

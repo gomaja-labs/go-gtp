@@ -13,6 +13,9 @@ func NewRANAPCause(cause uint8) *IE {
 
 // RANAPCause returns RANAPCause in uint8 if type matches.
 func (i *IE) RANAPCause() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != RANAPCause {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

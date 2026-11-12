@@ -122,7 +122,7 @@ func TestIE(t *testing.T) {
 				// Type, Length
 				0x80, 0x00, 0x02,
 				// Value
-				0xf0, 0xf1,
+				0xf0, 0x01,
 			},
 		},
 		/* XXX - not implemented

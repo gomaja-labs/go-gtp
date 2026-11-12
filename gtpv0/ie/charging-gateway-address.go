@@ -12,6 +12,9 @@ import (
 // NewChargingGatewayAddress creates a new ChargingGatewayAddress IE from string.
 func NewChargingGatewayAddress(addr string) *IE {
 	ip := net.ParseIP(addr)
+	if ip == nil {
+		return newErrorIE(ChargingGatewayAddress, ErrMalformed)
+	}
 	v4 := ip.To4()
 
 	// IPv4
@@ -24,10 +27,13 @@ func NewChargingGatewayAddress(addr string) *IE {
 
 // ChargingGatewayAddress returns ChargingGatewayAddress value if type matches.
 func (i *IE) ChargingGatewayAddress() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != ChargingGatewayAddress {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
-	if len(i.Payload) < 4 {
+	if len(i.Payload) != 4 && len(i.Payload) != 16 {
 		return "", io.ErrUnexpectedEOF
 	}
 

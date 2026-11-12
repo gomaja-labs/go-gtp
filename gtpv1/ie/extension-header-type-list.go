@@ -11,6 +11,9 @@ func NewExtensionHeaderTypeList(types ...uint8) *IE {
 
 // ExtensionHeaderTypeList returns ExtensionHeaderTypeList in []uint8 if type matches.
 func (i *IE) ExtensionHeaderTypeList() ([]uint8, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != ExtensionHeaderTypeList {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}

@@ -29,7 +29,7 @@ func NewEndUserAddress(addr string) *IE {
 // NewEndUserAddressByIP creates a new EndUserAddress IE from net.IP.
 func NewEndUserAddressByIP(ip net.IP) *IE {
 	if ip == nil {
-		return nil
+		return newErrorIE(EndUserAddress, ErrMalformed)
 	}
 
 	v4 := ip.To4()
@@ -39,12 +39,19 @@ func NewEndUserAddressByIP(ip net.IP) *IE {
 		return newEUAddrV4(v4)
 	}
 
-	return newEUAddrV6(ip)
+	if ip.To16() == nil {
+		return newErrorIE(EndUserAddress, ErrMalformed)
+	}
+	return newEUAddrV6(ip.To16())
 }
 
 // NewEndUserAddressIPv4 creates a new EndUserAddress IE with IPv4.
 func NewEndUserAddressIPv4(addr string) *IE {
-	v4 := net.ParseIP(addr).To4()
+	ip := net.ParseIP(addr)
+	if addr != "" && ip.To4() == nil {
+		return newErrorIE(EndUserAddress, ErrMalformed)
+	}
+	v4 := ip.To4()
 	if v4 == nil {
 		return New(EndUserAddress, []byte{0xf1, 0x21})
 	}
@@ -54,7 +61,11 @@ func NewEndUserAddressIPv4(addr string) *IE {
 
 // NewEndUserAddressIPv6 creates a new EndUserAddress IE with IPv6.
 func NewEndUserAddressIPv6(addr string) *IE {
-	v6 := net.ParseIP(addr).To16()
+	ip := net.ParseIP(addr)
+	if addr != "" && (ip.To16() == nil || ip.To4() != nil) {
+		return newErrorIE(EndUserAddress, ErrMalformed)
+	}
+	v6 := ip.To16()
 	if v6 == nil {
 		return New(EndUserAddress, []byte{0xf1, 0x57})
 	}
@@ -90,7 +101,8 @@ func newEUAddrV6(v6 []byte) *IE {
 func NewEndUserAddressPPP() *IE {
 	e := New(EndUserAddress, make([]byte, 2))
 	e.Payload[0] = pdpTypeETSI
-	e.Payload[1] = pdpTypeIETF
+	// TS 29.060 §7.7.27; GSM 09.60 §7.9.18: PPP number is 1.
+	e.Payload[1] = 1
 
 	e.SetLength()
 	return e
@@ -98,6 +110,9 @@ func NewEndUserAddressPPP() *IE {
 
 // EndUserAddress returns EndUserAddress value if type matches.
 func (i *IE) EndUserAddress() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != EndUserAddress {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -113,6 +128,9 @@ func (i *IE) MustEndUserAddress() []byte {
 
 // PDPTypeOrganization returns PDPTypeOrganization if type matches.
 func (i *IE) PDPTypeOrganization() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != EndUserAddress {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -120,7 +138,7 @@ func (i *IE) PDPTypeOrganization() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return i.Payload[0], nil
+	return i.Payload[0] & 0x0f, nil
 }
 
 // MustPDPTypeOrganization returns PDPTypeOrganization in uint8 if type matches.
@@ -132,6 +150,9 @@ func (i *IE) MustPDPTypeOrganization() uint8 {
 
 // PDPTypeNumber returns PDPTypeNumber if type matches.
 func (i *IE) PDPTypeNumber() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != EndUserAddress {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

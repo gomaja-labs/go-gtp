@@ -13,6 +13,9 @@ func NewCause(cause uint8) *IE {
 
 // Cause returns the Cause value if type matches.
 func (i *IE) Cause() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != Cause {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

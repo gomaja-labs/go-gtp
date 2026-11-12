@@ -16,6 +16,9 @@ func NewRATType(ratType uint8) *IE {
 
 // RATType returns RATType value if type matches.
 func (i *IE) RATType() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != RATType {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

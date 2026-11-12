@@ -13,6 +13,9 @@ func NewMSNotReachableReason(reason uint8) *IE {
 
 // MSNotReachableReason returns MSNotReachableReason value if type matches.
 func (i *IE) MSNotReachableReason() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != MSNotReachableReason {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

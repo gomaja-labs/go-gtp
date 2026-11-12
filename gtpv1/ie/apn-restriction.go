@@ -13,6 +13,9 @@ func NewAPNRestriction(restriction uint8) *IE {
 
 // APNRestriction returns APNRestriction in uint8 if type matches.
 func (i *IE) APNRestriction() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != APNRestriction {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

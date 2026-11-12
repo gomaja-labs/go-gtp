@@ -11,13 +11,13 @@ import (
 // DeletePDPContextResponse is a DeletePDPContextResponse Header and its IEs above.
 type DeletePDPContextResponse struct {
 	*Header
-	Cause            *ie.IE
-	PCO              *ie.IE
-	ULI              *ie.IE
-	MSTimeZone       *ie.IE
-	ULITimestamp     *ie.IE
-	PrivateExtension *ie.IE
-	AdditionalIEs    []*ie.IE
+	Cause             *ie.IE
+	PCO               *ie.IE
+	ULI               *ie.IE
+	MSTimeZone        *ie.IE
+	ULITimestamp      *ie.IE
+	PrivateExtensions []*ie.IE
+	AdditionalIEs     []*ie.IE
 }
 
 // NewDeletePDPContextResponse creates a new GTPv1 DeletePDPContextResponse.
@@ -32,17 +32,37 @@ func NewDeletePDPContextResponse(teid uint32, seq uint16, ies ...*ie.IE) *Delete
 		}
 		switch i.Type {
 		case ie.Cause:
-			d.Cause = i
+			if d.Cause == nil {
+				d.Cause = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.ProtocolConfigurationOptions:
-			d.PCO = i
+			if d.PCO == nil {
+				d.PCO = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.UserLocationInformation:
-			d.ULI = i
+			if d.ULI == nil {
+				d.ULI = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.MSTimeZone:
-			d.MSTimeZone = i
+			if d.MSTimeZone == nil {
+				d.MSTimeZone = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.ULITimestamp:
-			d.ULITimestamp = i
+			if d.ULITimestamp == nil {
+				d.ULITimestamp = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.PrivateExtension:
-			d.PrivateExtension = i
+			d.PrivateExtensions = append(d.PrivateExtensions, i)
 		default:
 			d.AdditionalIEs = append(d.AdditionalIEs, i)
 		}
@@ -54,6 +74,9 @@ func NewDeletePDPContextResponse(teid uint32, seq uint16, ies ...*ie.IE) *Delete
 
 // Marshal returns the byte sequence generated from a DeletePDPContextResponse.
 func (d *DeletePDPContextResponse) Marshal() ([]byte, error) {
+	if d == nil || d.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, d.MarshalLen())
 	if err := d.MarshalTo(b); err != nil {
 		return nil, err
@@ -64,67 +87,22 @@ func (d *DeletePDPContextResponse) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (d *DeletePDPContextResponse) MarshalTo(b []byte) error {
-	if len(b) < d.MarshalLen() {
-		return ErrTooShortToMarshal
+	if d == nil || d.Header == nil {
+		return ErrInvalidLength
 	}
-	d.Header.Payload = make([]byte, d.MarshalLen()-d.Header.MarshalLen())
-
-	offset := 0
-	if ie := d.Cause; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.PCO; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.ULI; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.MSTimeZone; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.ULITimestamp; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range d.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(d.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	d.Header.SetLength()
-	return d.Header.MarshalTo(b)
+	ies := []*ie.IE{d.Cause, d.PCO, d.ULI, d.MSTimeZone, d.ULITimestamp}
+	ies = append(ies, d.PrivateExtensions...)
+	ies = append(ies, d.AdditionalIEs...)
+	return marshalIEs(d.Header, b, ies)
 }
 
 // ParseDeletePDPContextResponse decodes a given byte sequence as a DeletePDPContextResponse.
 func ParseDeletePDPContextResponse(b []byte) (*DeletePDPContextResponse, error) {
 	d := &DeletePDPContextResponse{}
 	if err := d.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return d, err
+		}
 		return nil, err
 	}
 	return d, nil
@@ -132,13 +110,17 @@ func ParseDeletePDPContextResponse(b []byte) (*DeletePDPContextResponse, error) 
 
 // UnmarshalBinary decodes a given byte sequence as a DeletePDPContextResponse.
 func (d *DeletePDPContextResponse) UnmarshalBinary(b []byte) error {
+	if d == nil {
+		return ErrInvalidLength
+	}
+	*d = DeletePDPContextResponse{}
 	var err error
 	d.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(d.Header.Payload) < 2 {
-		return nil
+	if d.Header.Type != MsgTypeDeletePDPContextResponse {
+		return ErrInvalidMessageType
 	}
 
 	ies, err := ie.ParseMultiIEs(d.Header.Payload)
@@ -152,58 +134,60 @@ func (d *DeletePDPContextResponse) UnmarshalBinary(b []byte) error {
 		}
 		switch i.Type {
 		case ie.Cause:
-			d.Cause = i
+			if d.Cause == nil {
+				d.Cause = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.ProtocolConfigurationOptions:
-			d.PCO = i
+			if d.PCO == nil {
+				d.PCO = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.UserLocationInformation:
-			d.ULI = i
+			if d.ULI == nil {
+				d.ULI = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.MSTimeZone:
-			d.MSTimeZone = i
+			if d.MSTimeZone == nil {
+				d.MSTimeZone = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.ULITimestamp:
-			d.ULITimestamp = i
+			if d.ULITimestamp == nil {
+				d.ULITimestamp = i
+			} else {
+				d.AdditionalIEs = append(d.AdditionalIEs, i)
+			}
 		case ie.PrivateExtension:
-			d.PrivateExtension = i
+			d.PrivateExtensions = append(d.PrivateExtensions, i)
 		default:
 			d.AdditionalIEs = append(d.AdditionalIEs, i)
 		}
 	}
-	return nil
+	return validateMandatory(d.Header.Type, d.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (d *DeletePDPContextResponse) MarshalLen() int {
-	l := d.Header.MarshalLen() - len(d.Header.Payload)
-
-	if ie := d.Cause; ie != nil {
-		l += ie.MarshalLen()
+	if d == nil || d.Header == nil {
+		return 0
 	}
-	if ie := d.PCO; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.ULI; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.MSTimeZone; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.ULITimestamp; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
-	}
-
-	for _, ie := range d.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
-	}
-	return l
+	ies := []*ie.IE{d.Cause, d.PCO, d.ULI, d.MSTimeZone, d.ULITimestamp}
+	ies = append(ies, d.PrivateExtensions...)
+	ies = append(ies, d.AdditionalIEs...)
+	return messageLen(d.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (d *DeletePDPContextResponse) SetLength() {
+	if d == nil || d.Header == nil {
+		return
+	}
 	d.Length = uint16(d.MarshalLen() - 8)
 }
 
@@ -214,5 +198,8 @@ func (d *DeletePDPContextResponse) MessageTypeName() string {
 
 // TEID returns the TEID in human-readable string.
 func (d *DeletePDPContextResponse) TEID() uint32 {
+	if d == nil || d.Header == nil {
+		return 0
+	}
 	return d.Header.TEID
 }

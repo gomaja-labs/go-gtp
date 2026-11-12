@@ -19,6 +19,10 @@ const (
 
 // NewMSTimeZone creates a new MSTimeZone IE.
 func NewMSTimeZone(tz time.Duration, daylightSaving uint8) *IE {
+	// TS 29.060 §7.7.52: integral quarter-hours and daylight values 0..2.
+	if tz%(15*time.Minute) != 0 || tz > 79*15*time.Minute || tz < -79*15*time.Minute || daylightSaving > 2 {
+		return newErrorIE(MSTimeZone, ErrMalformed)
+	}
 	i := New(MSTimeZone, make([]byte, 2))
 	min := tz.Minutes() / 15
 	absMin := int(math.Abs(min))
@@ -34,6 +38,9 @@ func NewMSTimeZone(tz time.Duration, daylightSaving uint8) *IE {
 
 // TimeZone returns TimeZone in time.Duration if the type of IE matches.
 func (i *IE) TimeZone() (time.Duration, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != MSTimeZone {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -59,6 +66,9 @@ func (i *IE) MustTimeZone() time.Duration {
 
 // DaylightSaving returns DaylightSaving in uint8 if the type of IE matches.
 func (i *IE) DaylightSaving() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != MSTimeZone {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -66,7 +76,11 @@ func (i *IE) DaylightSaving() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return i.Payload[1], nil
+	v := i.Payload[1] & 3
+	if v == 3 {
+		return 0, ErrMalformed
+	}
+	return v, nil
 }
 
 // MustDaylightSaving returns DaylightSaving in uint8 if type matches.

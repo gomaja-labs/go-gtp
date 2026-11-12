@@ -14,6 +14,9 @@ func NewMSValidated(validated bool) *IE {
 
 // MSValidated returns MSValidated in bool if type matches.
 func (i *IE) MSValidated() bool {
+	if i.Err() != nil {
+		return false
+	}
 	if i.Type != MSValidated {
 		return false
 	}

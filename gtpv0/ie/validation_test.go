@@ -92,11 +92,11 @@ func TestShortMarshalDestination(t *testing.T) {
 
 func TestIdentityFillerValidation(t *testing.T) {
 	i := NewIMSI("123456789012345")
-	i.Payload = []byte{0xf1, 0x32}
+	i.Payload = []byte{0xf1, 0x32, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	if _, err := i.IMSI(); !errors.Is(err, utils.ErrMalformed) {
 		t.Fatal(err)
 	}
-	i.Payload = []byte{0xfa}
+	i.Payload = []byte{0xfa, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	if _, err := i.IMSI(); !errors.Is(err, utils.ErrMalformed) {
 		t.Fatal(err)
 	}

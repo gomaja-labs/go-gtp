@@ -19,6 +19,9 @@ func NewPrivateExtension(id uint16, val []byte) *IE {
 
 // PrivateExtension returns PrivateExtension value if type matches.
 func (i *IE) PrivateExtension() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != PrivateExtension {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -34,6 +37,9 @@ func (i *IE) MustPrivateExtension() []byte {
 
 // ExtensionIdentifier returns ExtensionIdentifier value in uint16 if type matches.
 func (i *IE) ExtensionIdentifier() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != PrivateExtension {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -53,6 +59,9 @@ func (i *IE) MustExtensionIdentifier() uint16 {
 
 // ExtensionValue returns ExtensionValue value if type matches.
 func (i *IE) ExtensionValue() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != PrivateExtension {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}

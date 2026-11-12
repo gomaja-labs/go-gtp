@@ -12,6 +12,10 @@ import (
 
 // NewIMEISV creates a new IMEISV IE.
 func NewIMEISV(imei string) *IE {
+	// TS 29.060 §7.7.53: 15-digit IMEI or 16-digit IMEISV.
+	if len(imei) != 15 && len(imei) != 16 {
+		return newErrorIE(IMEISV, ErrInvalidLength)
+	}
 	i, err := utils.EncodeBCDDigits(imei)
 	if err != nil {
 		return newErrorIE(IMEISV, err)

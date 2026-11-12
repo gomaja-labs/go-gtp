@@ -9,6 +9,8 @@ Constructors retain invalid input errors in the returned IE; Err and accessors
 report them, and Marshal/MarshalTo propagate them, including through messages.
 MarshalLen returns zero for nil IEs and IEs carrying construction errors.
 Nil IEs report ErrIENotFound. Must and Has helpers return zero values on errors.
+Parse and UnmarshalBinary validate individual IE contents; ParseMultiIEs checks
+framing and retains content errors for message-specific handling.
 */
 package ie
 
@@ -167,6 +169,9 @@ func (i *IE) Err() error {
 	if i.err != nil {
 		return fmt.Errorf("IE type %d: %w", i.Type, i.err)
 	}
+	if err := i.validatePayload(); err != nil {
+		return fmt.Errorf("IE type %d: %w", i.Type, err)
+	}
 	return nil
 }
 
@@ -184,6 +189,9 @@ func New(t uint8, p []byte) *IE {
 
 // Marshal returns the byte sequence generated from an IE instance.
 func (i *IE) Marshal() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	b := make([]byte, i.MarshalLen())
 	if err := i.MarshalTo(b); err != nil {
 		return nil, err
@@ -218,6 +226,13 @@ func (i *IE) MarshalTo(b []byte) error {
 		offset += 2
 	}
 	copy(b[offset:i.MarshalLen()], i.Payload)
+	// TS 29.060 §§7.7.15, 7.7.17, 7.7.52: spare bits are sent as zero.
+	switch i.Type {
+	case TEIDDataII, NSAPI:
+		b[offset] &= 0x0f
+	case MSTimeZone:
+		b[offset+1] &= 3
+	}
 	return nil
 }
 
@@ -232,6 +247,15 @@ func Parse(b []byte) (*IE, error) {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in GTPv1 IE.
 func (i *IE) UnmarshalBinary(b []byte) error {
+	if err := i.unmarshalFramed(b); err != nil {
+		return err
+	}
+	return i.Err()
+}
+
+// unmarshalFramed checks only boundaries; message applicability determines
+// whether an invalid value is fatal (TS 29.060 §11.1; GSM 09.60 §10.1).
+func (i *IE) unmarshalFramed(b []byte) error {
 	if i == nil {
 		return ErrIENotFound
 	}
@@ -242,17 +266,30 @@ func (i *IE) UnmarshalBinary(b []byte) error {
 
 	i.Type = b[0]
 	if i.Type == ExtensionHeaderTypeList {
-		return decodeExtensionHeaderTypeList(i, b)
+		if err := decodeExtensionHeaderTypeList(i, b); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if i.IsTV() {
-		return decodeTVFromBytes(i, b)
+		if err := decodeTVFromBytes(i, b); err != nil {
+			return err
+		}
+		return nil
 	}
 
-	return decodeTLVFromBytes(i, b)
+	if err := decodeTLVFromBytes(i, b); err != nil {
+		return err
+	}
+	return nil
 }
 
 func decodeTVFromBytes(i *IE, b []byte) error {
+	// TS 29.060 §11.1.9; GSM 09.60 §10.1.9: unknown TV length is unknowable.
+	if _, ok := tvLengthMap[int(i.Type)]; !ok {
+		return &InvalidTypeError{Type: i.Type}
+	}
 	l := len(b)
 	if l < 2 {
 		return ErrTooShortToParse
@@ -303,7 +340,6 @@ func decodeExtensionHeaderTypeList(i *IE, b []byte) error {
 }
 
 var tvLengthMap = map[int]int{
-	0:   0,  // Reserved
 	1:   1,  // Cause
 	2:   8,  // IMSI
 	3:   6,  // RouteingAreaIdentity
@@ -318,7 +354,7 @@ var tvLengthMap = map[int]int{
 	15:  1,  // Selection Mode
 	16:  4,  // TEID Data 1
 	17:  4,  // TEID C-Plane
-	18:  4,  // TEID Data 2
+	18:  5,  // TS 29.060 §7.7.15: NSAPI followed by TEID Data II.
 	19:  1,  // Teardown Indication
 	20:  1,  // NSAPI
 	21:  1,  // RANAP Cause
@@ -399,12 +435,13 @@ func (i *IE) String() string {
 	)
 }
 
-// ParseMultiIEs decodes multiple (unspecified number of) IEs to []*IE at a time.
+// ParseMultiIEs delimits IEs, rejecting framing errors. Invalid contents are
+// retained for message-specific handling; use Err or typed accessors to check them.
 func ParseMultiIEs(b []byte) ([]*IE, error) {
 	var ies []*IE
 	for len(b) > 0 {
-		i, err := Parse(b)
-		if err != nil {
+		i := &IE{}
+		if err := i.unmarshalFramed(b); err != nil {
 			return nil, err
 		}
 

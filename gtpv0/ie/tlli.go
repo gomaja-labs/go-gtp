@@ -16,6 +16,9 @@ func NewTemporaryLogicalLinkIdentity(tlli uint32) *IE {
 
 // TemporaryLogicalLinkIdentity returns TemporaryLogicalLinkIdentity value in uint32 if type matches.
 func (i *IE) TemporaryLogicalLinkIdentity() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != TemporaryLogicalLinkIdentity {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

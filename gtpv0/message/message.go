@@ -4,6 +4,15 @@
 
 /*
 Package message provides encoding/decoding feature of GTPv0 protocol.
+
+Decoding rejects framing errors. Incorrect optional and unexpected IEs are
+retained in their named field or AdditionalIEs; Err and typed accessors report
+content errors. Applications must treat these IEs as absent (TS 29.060
+§§11.1.8, 11.1.11, 11.1.13; GSM 09.60 §§10.1.8, 10.1.11, 10.1.13).
+Incorrect mandatory values return the decoded message and an InvalidIEError,
+so callers can respond with Mandatory IE incorrect. Conditional presence that
+depends on procedure state must be checked by the caller. Encoding validates
+all supplied IEs, including optional and unexpected ones.
 */
 package message
 
@@ -188,6 +197,9 @@ func Parse(b []byte) (Message, error) {
 	}
 
 	if err := g.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return g, err
+		}
 		return nil, fmt.Errorf("failed to Parse Message: %w", err)
 	}
 	return g, nil
@@ -201,7 +213,7 @@ func Decapsulate(b []byte) ([]byte, error) {
 	}
 
 	if header.Type != MsgTypeTPDU {
-		return nil, nil
+		return nil, ErrInvalidLength
 	}
 	return header.Payload, nil
 }

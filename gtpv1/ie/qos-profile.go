@@ -15,6 +15,9 @@ func NewQoSProfile(payload []byte) *IE {
 //
 // XXX - NOT Fully implemented. This method just returns the whole payload in []byte.
 func (i *IE) QoSProfile() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != QoSProfile {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}

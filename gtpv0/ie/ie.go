@@ -9,6 +9,8 @@ Constructors retain invalid input errors in the returned IE; Err and accessors
 report them, and Marshal/MarshalTo propagate them, including through messages.
 MarshalLen returns zero for nil IEs and IEs carrying construction errors.
 Nil IEs report ErrIENotFound. Must and Has helpers return zero values on errors.
+Parse and UnmarshalBinary validate individual IE contents; ParseMultiIEs checks
+framing and retains content errors for message-specific handling.
 */
 package ie
 
@@ -69,6 +71,9 @@ func (i *IE) Err() error {
 	if i.err != nil {
 		return fmt.Errorf("IE type %d: %w", i.Type, i.err)
 	}
+	if err := i.validatePayload(); err != nil {
+		return fmt.Errorf("IE type %d: %w", i.Type, err)
+	}
 	return nil
 }
 
@@ -85,6 +90,9 @@ func New(t uint8, p []byte) *IE {
 
 // Marshal returns the byte sequence generated from an IE instance.
 func (i *IE) Marshal() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	b := make([]byte, i.MarshalLen())
 	if err := i.MarshalTo(b); err != nil {
 		return nil, err
@@ -129,6 +137,15 @@ func Parse(b []byte) (*IE, error) {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in GTPv0 IE.
 func (i *IE) UnmarshalBinary(b []byte) error {
+	if err := i.unmarshalFramed(b); err != nil {
+		return err
+	}
+	return i.Err()
+}
+
+// unmarshalFramed checks only boundaries; message applicability determines
+// whether an invalid value is fatal (TS 29.060 §11.1; GSM 09.60 §10.1).
+func (i *IE) unmarshalFramed(b []byte) error {
 	if i == nil {
 		return ErrIENotFound
 	}
@@ -139,12 +156,22 @@ func (i *IE) UnmarshalBinary(b []byte) error {
 
 	i.Type = b[0]
 	if i.IsTV() {
-		return parseTVFromBytes(i, b)
+		if err := parseTVFromBytes(i, b); err != nil {
+			return err
+		}
+		return nil
 	}
-	return parseTLVFromBytes(i, b)
+	if err := parseTLVFromBytes(i, b); err != nil {
+		return err
+	}
+	return nil
 }
 
 func parseTVFromBytes(i *IE, b []byte) error {
+	// TS 29.060 §11.1.9; GSM 09.60 §10.1.9: unknown TV length is unknowable.
+	if _, ok := tvLengthMap[i.Type]; !ok {
+		return &InvalidTypeError{Type: i.Type}
+	}
 	l := len(b)
 	if l < 2 {
 		return ErrTooShortToParse
@@ -174,7 +201,6 @@ func parseTLVFromBytes(i *IE, b []byte) error {
 }
 
 var tvLengthMap = map[uint8]int{
-	0:   0,  // Reserved
 	1:   1,  // Cause
 	2:   8,  // IMSI
 	3:   6,  // RAI
@@ -255,12 +281,13 @@ func (i *IE) String() string {
 	)
 }
 
-// ParseMultiIEs Parses multiple (unspecified number of) IEs to []*IE at a time.
+// ParseMultiIEs delimits IEs, rejecting framing errors. Invalid contents are
+// retained for message-specific handling; use Err or typed accessors to check them.
 func ParseMultiIEs(b []byte) ([]*IE, error) {
 	var ies []*IE
 	for len(b) > 0 {
-		i, err := Parse(b)
-		if err != nil {
+		i := &IE{}
+		if err := i.unmarshalFramed(b); err != nil {
 			return nil, err
 		}
 

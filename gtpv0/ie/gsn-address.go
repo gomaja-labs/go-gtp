@@ -12,6 +12,9 @@ import (
 // NewGSNAddress creates a new GSNAddress IE from string.
 func NewGSNAddress(addr string) *IE {
 	ip := net.ParseIP(addr)
+	if ip == nil {
+		return newErrorIE(GSNAddress, ErrMalformed)
+	}
 	v4 := ip.To4()
 
 	// IPv4
@@ -19,15 +22,21 @@ func NewGSNAddress(addr string) *IE {
 		return New(GSNAddress, v4)
 	}
 	// IPv6
-	return New(GSNAddress, ip)
+	if ip.To16() == nil {
+		return newErrorIE(GSNAddress, ErrMalformed)
+	}
+	return New(GSNAddress, ip.To16())
 }
 
 // GSNAddress returns GSNAddress value if type matches.
 func (i *IE) GSNAddress() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != GSNAddress {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
-	if len(i.Payload) < 4 {
+	if len(i.Payload) != 4 && len(i.Payload) != 16 {
 		return "", io.ErrUnexpectedEOF
 	}
 

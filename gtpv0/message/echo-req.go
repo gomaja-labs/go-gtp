@@ -13,8 +13,8 @@ import (
 // EchoRequest is a EchoRequest Header and its AdditionalIEs above.
 type EchoRequest struct {
 	*Header
-	PrivateExtension *ie.IE
-	AdditionalIEs    []*ie.IE
+	PrivateExtensions []*ie.IE
+	AdditionalIEs     []*ie.IE
 }
 
 // NewEchoRequest creates a new EchoRequest.
@@ -31,7 +31,7 @@ func NewEchoRequest(seq, label uint16, tid uint64, ies ...*ie.IE) *EchoRequest {
 		}
 		switch i.Type {
 		case ie.PrivateExtension:
-			e.PrivateExtension = i
+			e.PrivateExtensions = append(e.PrivateExtensions, i)
 		default:
 			e.AdditionalIEs = append(e.AdditionalIEs, i)
 		}
@@ -43,6 +43,9 @@ func NewEchoRequest(seq, label uint16, tid uint64, ies ...*ie.IE) *EchoRequest {
 
 // Marshal returns the byte sequence generated from a EchoRequest.
 func (e *EchoRequest) Marshal() ([]byte, error) {
+	if e == nil || e.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, e.MarshalLen())
 	if err := e.MarshalTo(b); err != nil {
 		return nil, err
@@ -53,37 +56,22 @@ func (e *EchoRequest) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (e *EchoRequest) MarshalTo(b []byte) error {
-	if e.Header.Payload != nil {
-		e.Header.Payload = nil
+	if e == nil || e.Header == nil {
+		return ErrInvalidLength
 	}
-	e.Header.Payload = make([]byte, e.MarshalLen()-e.Header.MarshalLen())
-
-	offset := 0
-	if ie := e.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(e.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range e.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(e.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	e.Header.SetLength()
-	return e.Header.MarshalTo(b)
+	ies := []*ie.IE{}
+	ies = append(ies, e.PrivateExtensions...)
+	ies = append(ies, e.AdditionalIEs...)
+	return marshalIEs(e.Header, b, ies)
 }
 
 // ParseEchoRequest parses a given byte sequence as a EchoRequest.
 func ParseEchoRequest(b []byte) (*EchoRequest, error) {
 	e := &EchoRequest{}
 	if err := e.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return e, err
+		}
 		return nil, err
 	}
 	return e, nil
@@ -91,18 +79,22 @@ func ParseEchoRequest(b []byte) (*EchoRequest, error) {
 
 // UnmarshalBinary parses a given byte sequence as a EchoRequest.
 func (e *EchoRequest) UnmarshalBinary(b []byte) error {
+	if e == nil {
+		return ErrInvalidLength
+	}
+	*e = EchoRequest{}
 	var err error
 	e.Header, err = ParseHeader(b)
 	if err != nil {
 		return fmt.Errorf("failed to Parse Header: %w", err)
 	}
-	if len(e.Header.Payload) < 2 {
-		return nil
-	}
 
 	ies, err := ie.ParseMultiIEs(e.Header.Payload)
 	if err != nil {
 		return err
+	}
+	if e.Header.Type != MsgTypeEchoRequest {
+		return ErrInvalidMessageType
 	}
 
 	for _, i := range ies {
@@ -111,35 +103,31 @@ func (e *EchoRequest) UnmarshalBinary(b []byte) error {
 		}
 		switch i.Type {
 		case ie.PrivateExtension:
-			e.PrivateExtension = i
+			e.PrivateExtensions = append(e.PrivateExtensions, i)
 		default:
 			e.AdditionalIEs = append(e.AdditionalIEs, i)
 		}
 	}
 
-	return nil
+	return validateMandatory(e.Header.Type, e.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (e *EchoRequest) MarshalLen() int {
-	l := e.Header.MarshalLen() - len(e.Header.Payload)
-
-	if ie := e.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
+	if e == nil || e.Header == nil {
+		return 0
 	}
-
-	for _, ie := range e.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
-	}
-
-	return l
+	ies := []*ie.IE{}
+	ies = append(ies, e.PrivateExtensions...)
+	ies = append(ies, e.AdditionalIEs...)
+	return messageLen(e.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (e *EchoRequest) SetLength() {
+	if e == nil || e.Header == nil {
+		return
+	}
 	e.Header.Length = uint16(e.MarshalLen() - 20)
 }
 
@@ -150,5 +138,8 @@ func (e *EchoRequest) MessageTypeName() string {
 
 // TID returns the TID in human-readable string.
 func (e *EchoRequest) TID() string {
+	if e == nil || e.Header == nil {
+		return ""
+	}
 	return e.tid()
 }

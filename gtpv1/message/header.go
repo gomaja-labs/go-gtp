@@ -11,6 +11,7 @@ import (
 
 // Header is a GTPv1 common header.
 type Header struct {
+	err                     error
 	Flags                   uint8
 	Type                    uint8
 	Length                  uint16
@@ -47,7 +48,7 @@ func NewHeaderWithNPDUNumber(flags, mtype uint8, teid uint32, seqnum uint16, npd
 // NewHeaderWithExtensionHeaders creates a new Header with ExtensionHeaders.
 func NewHeaderWithExtensionHeaders(flags, mtype uint8, teid uint32, seqnum uint16, payload []byte, extHdrs ...*ExtensionHeader) *Header {
 	h := NewHeader(flags, mtype, teid, seqnum, payload)
-	_ = h.AddExtensionHeaders(extHdrs...)
+	h.err = h.AddExtensionHeaders(extHdrs...)
 	return h
 }
 
@@ -69,43 +70,54 @@ func (h *Header) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (h *Header) MarshalTo(b []byte) error {
-	if len(b) < h.MarshalLen() {
+	if h == nil {
+		return ErrInvalidLength
+	}
+	if h.err != nil {
+		return h.err
+	}
+	// TS 29.281 §§5.1, 5.2.1: representable length and a complete extension chain.
+	if h.Flags>>5 != 1 || h.Flags&0x10 == 0 {
+		return ErrInvalidMessageType
+	}
+	if h.MarshalLen()-8 > 65535 {
+		return ErrInvalidLength
+	}
+	if err := h.validateChain(); err != nil {
+		return err
+	}
+	n := h.MarshalLen()
+	if len(b) < n {
 		return ErrTooShortToMarshal
 	}
-
-	b[0] = h.Flags
+	clear(b[:n])
+	b[0] = h.Flags & 0xf7
 	b[1] = h.Type
-	binary.BigEndian.PutUint16(b[2:4], h.Length)
+	binary.BigEndian.PutUint16(b[2:4], uint16(n-8))
 	binary.BigEndian.PutUint32(b[4:8], h.TEID)
-
-	offset := 8
-	s, pn, e := h.HasSequence(), h.HasNPDUNumber(), h.HasExtensionHeader()
-	if s {
-		binary.BigEndian.PutUint16(b[offset:offset+2], h.SequenceNumber)
+	off := 8
+	// TS 29.281 §5.1: any E/S/PN flag includes all four optional octets; unused fields are zero.
+	if h.Flags&7 != 0 {
+		if h.HasSequence() {
+			binary.BigEndian.PutUint16(b[off:off+2], h.SequenceNumber)
+		}
+		if h.HasNPDUNumber() {
+			b[off+2] = h.NPDUNumber
+		}
+		if h.HasExtensionHeader() {
+			b[off+3] = h.NextExtensionHeaderType
+		}
+		off += 4
 	}
-
-	if pn {
-		b[offset+2] = h.NPDUNumber
-	}
-
-	if e {
-		b[offset+3] = h.NextExtensionHeaderType
-	}
-
-	if s || pn || e {
-		offset += 4
-	}
-
-	if e {
+	if h.HasExtensionHeader() {
 		for _, eh := range h.ExtensionHeaders {
-			if err := eh.MarshalTo(b[offset:]); err != nil {
+			if err := eh.MarshalTo(b[off:]); err != nil {
 				return err
 			}
-			offset += eh.MarshalLen()
+			off += eh.MarshalLen()
 		}
 	}
-
-	copy(b[offset:], h.Payload)
+	copy(b[off:n], h.Payload)
 	return nil
 }
 
@@ -120,81 +132,93 @@ func ParseHeader(b []byte) (*Header, error) {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in GTPv1 header.
 func (h *Header) UnmarshalBinary(b []byte) error {
-	l := len(b)
-	if l < 8 {
+	if h == nil {
+		return ErrInvalidLength
+	}
+	*h = Header{}
+	// TS 29.281 §5.1: version 1, PT=1 and Length excludes the first eight octets.
+	if len(b) < 8 {
 		return ErrTooShortToParse
 	}
-	var offset = 4
+	if b[0]>>5 != 1 || b[0]&0x10 == 0 {
+		return ErrInvalidMessageType
+	}
 	h.Flags = b[0]
 	h.Type = b[1]
 	h.Length = binary.BigEndian.Uint16(b[2:4])
-
 	h.TEID = binary.BigEndian.Uint32(b[4:8])
-	offset += 4
-
-	if l < int(h.Length)+8 {
+	end := 8 + int(h.Length)
+	if end > len(b) {
 		return ErrTooShortToParse
 	}
-
-	s, pn, e := h.HasSequence(), h.HasNPDUNumber(), h.HasExtensionHeader()
-	// The optional 4 bytes will append to mandatory GTP header if any one or more S, E flags are set.
-	if s || pn || e {
-		if h.Length < 4 {
-			return ErrTooShortToParse
-		}
-		// Sequence number must be interpreted only if the S bit is on
-		if s {
-			h.SequenceNumber = binary.BigEndian.Uint16(b[offset : offset+2])
-		}
-		// NPDUNumber must be interpreted only if the PN bit is on
-		if pn {
-			h.NPDUNumber = b[offset+2]
-		}
-		// Next Extension Header Type must be interpreted only if the E bit is on.
-		if e {
-			h.NextExtensionHeaderType = b[offset+3]
-		}
-		offset += 4
-	}
-
-	if e {
-		var err error
-		h.ExtensionHeaders, err = ParseMultiExtensionHeaders(b[offset:])
-		if err != nil {
-			return err
-		}
-		h.ExtensionHeaders[0].Type = h.NextExtensionHeaderType
-
-		for _, eh := range h.ExtensionHeaders {
-			offset += eh.MarshalLen()
-		}
-	}
-
-	if offset > int(h.Length)+8 {
+	if end != len(b) {
 		return ErrInvalidLength
 	}
-	h.Payload = b[offset : 8+h.Length]
+	off := 8
+	if h.Flags&7 != 0 {
+		if end-off < 4 {
+			return ErrTooShortToParse
+		}
+		if h.HasSequence() {
+			h.SequenceNumber = binary.BigEndian.Uint16(b[off : off+2])
+		}
+		if h.HasNPDUNumber() {
+			h.NPDUNumber = b[off+2]
+		}
+		if h.HasExtensionHeader() {
+			h.NextExtensionHeaderType = b[off+3]
+		}
+		off += 4
+	}
+	// TS 29.281 §5.2.1: next type zero terminates the chain, including an empty chain.
+	next := h.NextExtensionHeaderType
+	for next != 0 {
+		eh := &ExtensionHeader{Type: next}
+		if err := eh.UnmarshalBinary(b[off:end]); err != nil {
+			return err
+		}
+		if err := eh.validateReceived(); err != nil {
+			return err
+		}
+		h.ExtensionHeaders = append(h.ExtensionHeaders, eh)
+		off += eh.MarshalLen()
+		next = eh.NextType
+	}
+	if off < end {
+		h.Payload = b[off:end]
+	}
 	return nil
 }
 
-// SetTEID sets the TEIDFlag to 1 and puts the TEID given into TEID field.
+// SetTEID sets the always-present TEID (TS 29.281 §5.1).
 func (h *Header) SetTEID(teid uint32) {
-	h.Flags |= (1 << 3)
+	if h == nil {
+		return
+	}
 	h.TEID = teid
 }
 
 // Sequence returns SequenceNumber in uint16.
 func (h *Header) Sequence() uint16 {
+	if h == nil {
+		return 0
+	}
 	return h.SequenceNumber
 }
 
 // HasSequence reports whether a Header has SequenceNumber by checking the flag.
 func (h *Header) HasSequence() bool {
+	if h == nil {
+		return false
+	}
 	return ((int(h.Flags) >> 1) & 0x1) == 1
 }
 
 // SetSequenceNumber sets the SequenceNumber in Header.
 func (h *Header) SetSequenceNumber(seq uint16) {
+	if h == nil {
+		return
+	}
 	h.Flags |= 0x02
 	h.SequenceNumber = seq
 	h.SetLength()
@@ -208,11 +232,17 @@ func (h *Header) WithSequenceNumber(seq uint16) *Header {
 
 // HasNPDUNumber reports whether a Header has N-PDU Number by checking the flag.
 func (h *Header) HasNPDUNumber() bool {
+	if h == nil {
+		return false
+	}
 	return (int(h.Flags) & 0x1) == 1
 }
 
 // SetNPDUNumber sets the NPDUNumber in Header.
 func (h *Header) SetNPDUNumber(npdu uint8) {
+	if h == nil {
+		return
+	}
 	h.Flags |= 0x01
 	h.NPDUNumber = npdu
 	h.SetLength()
@@ -226,23 +256,32 @@ func (h *Header) WithNPDUNumber(npdu uint8) *Header {
 
 // HasExtensionHeader reports whether a Header has extension header by checking the flag.
 func (h *Header) HasExtensionHeader() bool {
+	if h == nil {
+		return false
+	}
 	return ((int(h.Flags) >> 2) & 0x1) == 1
 }
 
 // SetNextExtensionHeaderType sets the ExtensionHeaderType in Header.
 func (h *Header) SetNextExtensionHeaderType(exhType uint8) {
+	if h == nil {
+		return
+	}
 	h.Flags |= 0x04
 	h.NextExtensionHeaderType = exhType
 }
 
 // WithExtensionHeaders returns the Header with ExtensionHeaders added.
 func (h *Header) WithExtensionHeaders(extHdrs ...*ExtensionHeader) *Header {
-	_ = h.AddExtensionHeaders(extHdrs...)
+	h.err = h.AddExtensionHeaders(extHdrs...)
 	return h
 }
 
 // MarshalLen returns the serial length of Header.
 func (h *Header) MarshalLen() int {
+	if h == nil {
+		return 0
+	}
 	l := len(h.Payload) + 8
 	if h.HasSequence() || h.HasNPDUNumber() || h.HasExtensionHeader() {
 		l += 4
@@ -259,6 +298,9 @@ func (h *Header) MarshalLen() int {
 
 // SetLength sets the length in Length field.
 func (h *Header) SetLength() {
+	if h == nil {
+		return
+	}
 	h.Length = uint16(h.MarshalLen() - 8)
 }
 
@@ -269,11 +311,17 @@ func (h *Header) Version() int {
 
 // MessageType returns the type of message.
 func (h *Header) MessageType() uint8 {
+	if h == nil {
+		return 0
+	}
 	return h.Type
 }
 
 // String returns the GTPv1 header values in human readable format.
 func (h *Header) String() string {
+	if h == nil {
+		return "nil"
+	}
 	return fmt.Sprintf(
 		"{Flags: %#x, Type: %#x, Length: %d, TEID: %#08x, SequenceNumber: %#04x, NPDUNumber: %#x, "+
 			"ExtensionHeaderType: %#x, ExtensionHeaders: %v, Payload: %#v}",
@@ -294,26 +342,70 @@ func (h *Header) String() string {
 // This function validates if the next extension header type matches the actual one for safety.
 // To create arbitrary(possibly malformed) Header, access ExtensionHeaders field on your own.
 func (h *Header) AddExtensionHeaders(extHdrs ...*ExtensionHeader) error {
-	if len(extHdrs) < 1 {
+	if h == nil {
+		return ErrInvalidLength
+	}
+	if len(extHdrs) == 0 {
 		return nil
 	}
-
-	h.Flags |= 0x04
-
-	h.NextExtensionHeaderType = extHdrs[0].Type
-	next := h.NextExtensionHeaderType
-	for _, eh := range extHdrs {
-		if next != eh.Type {
-			return fmt.Errorf("next type: %x does not match the current type: %x", next, eh.Type)
+	// TS 29.281 §5.2.1: validate before linking the former tail to the new first type.
+	for j, eh := range extHdrs {
+		if eh == nil || eh.Type == 0 {
+			return ErrInvalidLength
 		}
-		h.ExtensionHeaders = append(h.ExtensionHeaders, eh)
-		next = eh.NextType
+		if err := eh.validate(); err != nil {
+			return err
+		}
+		next := uint8(0)
+		if j+1 < len(extHdrs) {
+			if extHdrs[j+1] == nil {
+				return ErrInvalidLength
+			}
+			next = extHdrs[j+1].Type
+		}
+		if eh.NextType != next {
+			return ErrInvalidLength
+		}
 	}
-
-	if next != ExtHeaderTypeNoMoreExtensionHeaders {
-		return fmt.Errorf("non-empty next type: %x is specified but does not exist", next)
+	if err := h.validateChain(); err != nil {
+		return err
 	}
-
+	combined := append([]*ExtensionHeader(nil), h.ExtensionHeaders...)
+	if len(combined) > 0 {
+		tail := *combined[len(combined)-1]
+		tail.NextType = extHdrs[0].Type
+		combined[len(combined)-1] = &tail
+	}
+	combined = append(combined, extHdrs...)
+	h.Flags |= 4
+	h.NextExtensionHeaderType = combined[0].Type
+	h.ExtensionHeaders = combined
 	h.SetLength()
 	return nil
 }
+
+func (h *Header) validateChain() error {
+	next := h.NextExtensionHeaderType
+	if !h.HasExtensionHeader() {
+		if len(h.ExtensionHeaders) > 0 {
+			return ErrInvalidLength
+		}
+		return nil
+	}
+	for _, eh := range h.ExtensionHeaders {
+		if eh == nil || eh.Type == 0 || eh.Type != next {
+			return ErrInvalidLength
+		}
+		if err := eh.validate(); err != nil {
+			return err
+		}
+		next = eh.NextType
+	}
+	if next != 0 {
+		return ErrInvalidLength
+	}
+	return nil
+}
+
+// GetHeader returns the common header, including transport extension headers.
+func (h *Header) GetHeader() *Header { return h }

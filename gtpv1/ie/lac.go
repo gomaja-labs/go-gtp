@@ -11,6 +11,9 @@ import (
 
 // LAC returns LAC value if type matches.
 func (i *IE) LAC() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
 		if len(i.Payload) < 5 {

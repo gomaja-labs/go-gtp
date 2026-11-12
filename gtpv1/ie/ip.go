@@ -11,14 +11,20 @@ import (
 
 // IP returns IP in net.IP if type matches.
 func (i *IE) IP() (net.IP, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if len(i.Payload) < 4 {
 		return nil, io.ErrUnexpectedEOF
 	}
 
 	switch i.Type {
 	case EndUserAddress:
-		if i.MustPDPTypeOrganization() != pdpTypeIETF {
+		if i.MustPDPTypeOrganization() != pdpTypeIETF&15 {
 			return nil, ErrMalformed
+		}
+		if len(i.Payload) != 6 && len(i.Payload) != 18 {
+			return nil, ErrInvalidLength
 		}
 		return net.IP(i.Payload[2:]), nil
 	case GSNAddress:
@@ -35,6 +41,9 @@ func (i *IE) MustIP() net.IP {
 
 // IPAddress returns IPAddress in string if type matches.
 func (i *IE) IPAddress() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	ip, err := i.IP()
 	if err != nil {
 		return "", err

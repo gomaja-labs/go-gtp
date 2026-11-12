@@ -16,6 +16,9 @@ func NewChargingID(id uint32) *IE {
 
 // ChargingID returns ChargingID value in uint32 if type matches.
 func (i *IE) ChargingID() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != ChargingID {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

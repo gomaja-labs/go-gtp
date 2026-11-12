@@ -21,33 +21,47 @@ type testVal struct {
 	payload         []byte
 }
 
-func setup(ctx context.Context) (cliConn, srvConn *gtpv1.UPlaneConn, err error) {
-	cliAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2152")
-	if err != nil {
-		return nil, nil, err
-	}
-	srvAddr, err := net.ResolveUDPAddr("udp", "127.0.0.2:2152")
-	if err != nil {
-		return nil, nil, err
-	}
+// setup starts a serving UPlaneConn on 127.0.0.2:2152 and a client dialled to
+// it from 127.0.0.1:2152. Both are closed when the test ends.
+func setup(t *testing.T, ctx context.Context) (cliConn, srvConn *gtpv1.UPlaneConn) {
+	t.Helper()
+	cliAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2152}
+	srvAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 2), Port: 2152}
 
-	go func() {
-		srvConn = gtpv1.NewUPlaneConn(srvAddr)
-		srvConn.DisableErrorIndication()
-		if err := srvConn.ListenAndServe(ctx); err != nil {
-			return
+	srvConn = gtpv1.NewUPlaneConn(srvAddr)
+	srvConn.DisableErrorIndication()
+	served := make(chan error, 1)
+	go func() { served <- srvConn.ListenAndServe(ctx) }()
+	t.Cleanup(func() {
+		_ = srvConn.Close()
+		select {
+		case err := <-served:
+			if err != nil {
+				t.Logf("ListenAndServe after Close: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("ListenAndServe did not return after Close")
 		}
-	}()
+	})
 
-	// XXX - waiting for server to be well-prepared, should consider better way.
-	time.Sleep(1 * time.Second)
-	cliConn, err = gtpv1.DialUPlane(ctx, cliAddr, srvAddr)
-	if err != nil {
-		return nil, nil, err
+	// DialUPlane's Echo handshake succeeds once the server is serving; retry
+	// while it is still starting.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		dctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+		c, err := gtpv1.DialUPlane(dctx, cliAddr, srvAddr)
+		cancel()
+		if err == nil {
+			cliConn = c
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server did not answer the Echo handshake: %v", err)
+		}
 	}
 	cliConn.DisableErrorIndication()
-
-	return cliConn, srvConn, nil
+	t.Cleanup(func() { _ = cliConn.Close() })
+	return cliConn, srvConn
 }
 
 func TestClientWrite(t *testing.T) {
@@ -63,10 +77,7 @@ func TestClientWrite(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cliConn, srvConn, err := setup(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cliConn, srvConn := setup(t, ctx)
 
 	go func(tv *testVal) {
 		n, addr, teid, err := srvConn.ReadFromGTP(buf)

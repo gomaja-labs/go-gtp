@@ -15,6 +15,9 @@ func NewSelectionMode(mode uint8) *IE {
 
 // SelectionMode returns SelectionMode value if type matches.
 func (i *IE) SelectionMode() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != SelectionMode {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

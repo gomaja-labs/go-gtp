@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"syscall"
 
 	"github.com/vishvananda/netlink"
 )
@@ -38,6 +39,24 @@ const (
 //
 // Please see the examples/gw-tester for how each node handles routing from the program.
 func (u *UPlaneConn) EnableKernelGTP(devname string, role Role) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	select {
+	case <-u.closeCh:
+		return net.ErrClosed
+	default:
+	}
+	if u.KernelGTP.enabled {
+		return errors.New("kernel GTP already enabled")
+	}
+	acquired := u.pktConn == nil
+	success := false
+	defer func() {
+		if acquired && !success && u.pktConn != nil {
+			_ = u.pktConn.Close()
+			u.pktConn = nil
+		}
+	}()
 	if u.pktConn == nil {
 		var err error
 		u.pktConn, err = newPktConn(u.laddr)
@@ -46,46 +65,35 @@ func (u *UPlaneConn) EnableKernelGTP(devname string, role Role) error {
 		}
 	}
 
-	f, err := u.pktConn.File()
+	err := withKernelSocket(u.pktConn, func(fd uintptr) error {
+		link := &netlink.GTP{LinkAttrs: netlink.LinkAttrs{Name: devname}, FD1: int(fd), Role: int(role)}
+		if err := configureKernelLink(link, kernelLinkOps{netlink.LinkAdd, netlink.LinkSetUp, netlink.LinkSetMTU, netlink.LinkDel}); err != nil {
+			return err
+		}
+		u.KernelGTP.Link = link
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve file from conn: %w", err)
+		return err
 	}
+	success = true
 
-	u.KernelGTP.Link = &netlink.GTP{
-		LinkAttrs: netlink.LinkAttrs{
-			Name: devname,
-		},
-		FD1:  int(f.Fd()),
-		Role: int(role),
-	}
-
-	if err := netlink.LinkAdd(u.KernelGTP.Link); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("failed to add device %s: %w", u.KernelGTP.Link.Name, err)
-	}
-	if err := netlink.LinkSetUp(u.KernelGTP.Link); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("failed to setup device %s: %w", u.KernelGTP.Link.Name, err)
-	}
-	if err := netlink.LinkSetMTU(u.KernelGTP.Link, 1500); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("failed to set MTU for device %s: %w", u.KernelGTP.Link.Name, err)
-	}
-	u.KernelGTP.connFile = f
 	u.KernelGTP.enabled = true
 
 	// remove relayed userland tunnels if exists
-	if len(u.relayMap) != 0 {
-		u.mu.Lock()
-		u.relayMap = nil
-		u.mu.Unlock()
-	}
+	u.relayMap = nil
 
 	return nil
 }
 
 // AddTunnel adds a GTP-U tunnel with Linux Kernel GTP-U via netlink.
 func (u *UPlaneConn) AddTunnel(peerIP, msIP net.IP, otei, itei uint32) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.addTunnel(peerIP, msIP, otei, itei)
+}
+
+func (u *UPlaneConn) addTunnel(peerIP, msIP net.IP, otei, itei uint32) error {
 	if !u.KernelGTP.enabled {
 		return errors.New("cannot call AddTunnel when not using Kernel GTP-U")
 	}
@@ -107,6 +115,8 @@ func (u *UPlaneConn) AddTunnel(peerIP, msIP net.IP, otei, itei uint32) error {
 // If there is already an existing tunnel that has the same msIP and/or incoming TEID,
 // this deletes it before adding the tunnel.
 func (u *UPlaneConn) AddTunnelOverride(peerIP, msIP net.IP, otei, itei uint32) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	if !u.KernelGTP.enabled {
 		return errors.New("cannot call AddTunnelOverride when not using Kernel GTP-U")
 	}
@@ -120,11 +130,13 @@ func (u *UPlaneConn) AddTunnelOverride(peerIP, msIP net.IP, otei, itei uint32) e
 		_ = netlink.GTPPDPDel(u.KernelGTP.Link, pdp)
 	}
 
-	return u.AddTunnel(peerIP, msIP, otei, itei)
+	return u.addTunnel(peerIP, msIP, otei, itei)
 }
 
 // DelTunnelByITEI deletes a Linux Kernel GTP-U tunnel specified with the incoming TEID.
 func (u *UPlaneConn) DelTunnelByITEI(itei uint32) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	if !u.KernelGTP.enabled {
 		return errors.New("cannot call DelTunnel when not using Kernel GTP-U")
 	}
@@ -144,6 +156,8 @@ func (u *UPlaneConn) DelTunnelByITEI(itei uint32) error {
 
 // DelTunnelByMSAddress deletes a Linux Kernel GTP-U tunnel specified with the subscriber's IP.
 func (u *UPlaneConn) DelTunnelByMSAddress(msIP net.IP) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	if !u.KernelGTP.enabled {
 		return errors.New("cannot call DelTunnel when not using Kernel GTP-U")
 	}
@@ -160,4 +174,42 @@ func (u *UPlaneConn) DelTunnelByMSAddress(msIP net.IP) error {
 
 	u.iteiMap.delete(itei)
 	return nil
+}
+
+type kernelLinkOps struct {
+	add func(netlink.Link) error
+	up  func(netlink.Link) error
+	mtu func(netlink.Link, int) error
+	del func(netlink.Link) error
+}
+
+func configureKernelLink(link *netlink.GTP, ops kernelLinkOps) error {
+	if err := ops.add(link); err != nil {
+		return fmt.Errorf("add device %s: %w", link.Name, err)
+	}
+	if err := ops.up(link); err != nil {
+		return errors.Join(fmt.Errorf("set up device %s: %w", link.Name, err), ops.del(link))
+	}
+	if err := ops.mtu(link, 1500); err != nil {
+		return errors.Join(fmt.Errorf("set MTU for device %s: %w", link.Name, err), ops.del(link))
+	}
+	return nil
+}
+
+// withKernelSocket keeps the descriptor valid without File/Fd, which changes
+// O_NONBLOCK on the shared socket and defeats netpoll deadlines and Close.
+func withKernelSocket(pc pktConn, configure func(uintptr) error) error {
+	conn, ok := pc.(syscall.Conn)
+	if !ok {
+		return errors.New("packet connection does not expose a raw socket")
+	}
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+	var configureErr error
+	if err := raw.Control(func(fd uintptr) { configureErr = configure(fd) }); err != nil {
+		return err
+	}
+	return configureErr
 }

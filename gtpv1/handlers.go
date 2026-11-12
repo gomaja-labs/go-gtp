@@ -7,7 +7,6 @@ package gtpv1
 import (
 	"net"
 	"sync"
-	"time"
 
 	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv1/message"
@@ -45,8 +44,6 @@ func newMsgHandlerMap(m map[uint8]HandlerFunc) *msgHandlerMap {
 func newDefaultMsgHandlerMap() *msgHandlerMap {
 	return newMsgHandlerMap(
 		map[uint8]HandlerFunc{
-			message.MsgTypeTPDU:            handleTPDU,
-			message.MsgTypeEchoRequest:     handleEchoRequest,
 			message.MsgTypeEchoResponse:    handleEchoResponse,
 			message.MsgTypeErrorIndication: handleErrorIndication,
 		},
@@ -57,6 +54,10 @@ func newDefaultMsgHandlerMap() *msgHandlerMap {
 // By disabling it(DisableErrorIndication), it passes unhandled T-PDU to
 // user, which can be caught by calling ReadFromGTP.
 func handleTPDU(c Conn, senderAddr net.Addr, msg message.Message) error {
+	return handleTPDUAt(c, senderAddr, msg, nil)
+}
+
+func handleTPDUAt(c Conn, senderAddr net.Addr, msg message.Message, dst net.IP) error {
 	// this should never happen, as the type should have been assured by
 	// msgHandlerMap before this function is called.
 	pdu, ok := msg.(*message.TPDU)
@@ -69,8 +70,15 @@ func handleTPDU(c Conn, senderAddr net.Addr, msg message.Message) error {
 		return ErrInvalidConnection
 	}
 
-	if u.errIndEnabled {
-		if err := u.ErrorIndication(senderAddr, pdu); err != nil {
+	// TS 29.281 §7.3.1: unknown zero TEID is discarded without Error Indication.
+	if pdu.TEID() == 0 {
+		return nil
+	}
+	u.mu.Lock()
+	enabled := u.errIndEnabled
+	u.mu.Unlock()
+	if enabled {
+		if err := u.ErrorIndication(senderAddr, pdu, dst); err != nil {
 			logf("failed to send Error Indication to %s: %v", senderAddr, err)
 		}
 		return nil
@@ -83,16 +91,15 @@ func handleTPDU(c Conn, senderAddr net.Addr, msg message.Message) error {
 		payload: pdu.Payload,
 	}
 
-	// wait for the T-PDU passed to u.tpduCh to be read by ReadFromGTP.
-	// if it got stuck for 3 seconds, it discards the T-PDU received.
-	go func() {
-		select {
-		case u.tpduCh <- tpdu:
-			return
-		case <-time.After(3 * time.Second):
-			return
-		}
-	}()
+	// A slow payload reader must not stall signalling or relay dispatch.
+	// The bounded queue drops new payloads when full.
+	select {
+	case u.tpduCh <- tpdu:
+	case <-u.closed():
+		return net.ErrClosed
+	default:
+	}
+
 	return nil
 }
 
@@ -105,7 +112,7 @@ func handleEchoRequest(c Conn, senderAddr net.Addr, msg message.Message) error {
 
 	// respond with EchoResponse.
 	return c.RespondTo(
-		senderAddr, msg, message.NewEchoResponse(0, ie.NewRecovery(c.Restarts())),
+		senderAddr, msg, message.NewEchoResponse(0, ie.NewRecovery(0)),
 	)
 }
 
@@ -128,6 +135,15 @@ func handleErrorIndication(c Conn, senderAddr net.Addr, msg message.Message) err
 		return ErrUnexpectedType
 	}
 
+	if ind == nil || ind.TEIDDataI == nil || ind.GTPUPeerAddress == nil {
+		return message.ErrMissingIE
+	}
+	if _, err := ind.TEIDDataI.TEID(); err != nil {
+		return err
+	}
+	if _, err := ind.GTPUPeerAddress.IP(); err != nil {
+		return err
+	}
 	// just log and return
 	logf("Ignored Error Indication: %v", &ErrorIndicatedError{
 		TEID: ind.TEIDDataI.MustTEID(),

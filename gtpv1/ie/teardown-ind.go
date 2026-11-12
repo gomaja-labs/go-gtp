@@ -14,6 +14,9 @@ func NewTeardownInd(teardown bool) *IE {
 
 // TeardownInd returns TeardownInd in bool if type matches.
 func (i *IE) TeardownInd() bool {
+	if i.Err() != nil {
+		return false
+	}
 	if i.Type != TeardownInd {
 		return false
 	}

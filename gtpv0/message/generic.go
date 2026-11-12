@@ -35,6 +35,9 @@ func NewGeneric(msgType uint8, seq, label uint16, tid uint64, ie ...*ie.IE) *Gen
 
 // Marshal returns the byte sequence generated from a Generic.
 func (g *Generic) Marshal() ([]byte, error) {
+	if g == nil || g.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, g.MarshalLen())
 	if err := g.MarshalTo(b); err != nil {
 		return nil, err
@@ -45,30 +48,21 @@ func (g *Generic) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (g *Generic) MarshalTo(b []byte) error {
-	if g.Header.Payload != nil {
-		g.Header.Payload = nil
+	if g == nil || g.Header == nil {
+		return ErrInvalidLength
 	}
-	g.Header.Payload = make([]byte, g.MarshalLen()-g.Header.MarshalLen())
-
-	offset := 0
-	for _, ie := range g.IEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(g.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	g.Header.SetLength()
-	return g.Header.MarshalTo(b)
+	ies := []*ie.IE{}
+	ies = append(ies, g.IEs...)
+	return marshalIEs(g.Header, b, ies)
 }
 
 // ParseGeneric parses a given byte sequence as a Generic.
 func ParseGeneric(b []byte) (*Generic, error) {
 	g := &Generic{}
 	if err := g.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return g, err
+		}
 		return nil, err
 	}
 	return g, nil
@@ -76,47 +70,54 @@ func ParseGeneric(b []byte) (*Generic, error) {
 
 // UnmarshalBinary parses a given byte sequence as a Generic.
 func (g *Generic) UnmarshalBinary(b []byte) error {
+	if g == nil {
+		return ErrInvalidLength
+	}
+	*g = Generic{}
 	var err error
 	g.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
-	}
-	if len(g.Header.Payload) < 2 {
-		return nil
 	}
 
 	g.IEs, err = ie.ParseMultiIEs(g.Header.Payload)
 	if err != nil {
 		return err
 	}
-	return nil
+	return validateMandatory(g.Header.Type, g.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (g *Generic) MarshalLen() int {
-	l := g.Header.MarshalLen() - len(g.Header.Payload)
-	for _, ie := range g.IEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
+	if g == nil || g.Header == nil {
+		return 0
 	}
-
-	return l
+	ies := []*ie.IE{}
+	ies = append(ies, g.IEs...)
+	return messageLen(g.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (g *Generic) SetLength() {
+	if g == nil || g.Header == nil {
+		return
+	}
 	g.Header.Length = uint16(g.MarshalLen() - 20)
 }
 
 // MessageTypeName returns the name of protocol.
 func (g *Generic) MessageTypeName() string {
+	if g == nil || g.Header == nil {
+		return "Unknown"
+	}
 	return fmt.Sprintf("Unknown (%d)", g.Type)
 }
 
 // TID returns the TID in human-readable string.
 func (g *Generic) TID() string {
+	if g == nil || g.Header == nil {
+		return ""
+	}
 	return g.tid()
 }
 

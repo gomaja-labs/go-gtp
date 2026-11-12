@@ -8,7 +8,8 @@ import "errors"
 
 // Error definitions.
 var (
-	ErrInvalidLength     = errors.New("got invalid length")
-	ErrTooShortToMarshal = errors.New("too short to Marshal")
-	ErrTooShortToParse   = errors.New("too short to Parse as GTPv0")
+	ErrInvalidMessageType = errors.New("invalid message type")
+	ErrInvalidLength      = errors.New("got invalid length")
+	ErrTooShortToMarshal  = errors.New("too short to Marshal")
+	ErrTooShortToParse    = errors.New("too short to Parse as GTPv0")
 )

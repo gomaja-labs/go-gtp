@@ -65,12 +65,14 @@ func NewUserLocationInformationWithRAI(mcc, mnc string, lac uint16, rac uint8) *
 
 	uli := New(
 		UserLocationInformation,
-		make([]byte, 7),
+		make([]byte, 8),
 	)
 	uli.Payload[0] = locTypeRAI
 	copy(uli.Payload[1:4], plmn)
 	binary.BigEndian.PutUint16(uli.Payload[4:6], lac)
+	// TS 29.060 §7.7.51 Figure 7.7.51.4: RAC followed by FF.
 	uli.Payload[6] = rac
+	uli.Payload[7] = 0xff
 
 	return uli
 }

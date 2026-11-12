@@ -18,7 +18,7 @@ type SupportedExtensionHeaderNotification struct {
 // NewSupportedExtensionHeaderNotification creates a new GTPv1 SupportedExtensionHeaderNotification.
 func NewSupportedExtensionHeaderNotification(teid uint32, seq uint16, ies ...*ie.IE) *SupportedExtensionHeaderNotification {
 	e := &SupportedExtensionHeaderNotification{
-		Header: NewHeader(0x30, MsgTypeSupportedExtensionHeaderNotification, teid, seq, nil),
+		Header: NewHeader(0x32, MsgTypeSupportedExtensionHeaderNotification, teid, seq, nil),
 	}
 
 	for _, i := range ies {
@@ -27,7 +27,11 @@ func NewSupportedExtensionHeaderNotification(teid uint32, seq uint16, ies ...*ie
 		}
 		switch i.Type {
 		case ie.ExtensionHeaderTypeList:
-			e.ExtensionHeaderTypeList = i
+			if e.ExtensionHeaderTypeList == nil {
+				e.ExtensionHeaderTypeList = i
+			} else {
+				e.AdditionalIEs = append(e.AdditionalIEs, i)
+			}
 		default:
 			e.AdditionalIEs = append(e.AdditionalIEs, i)
 		}
@@ -39,6 +43,9 @@ func NewSupportedExtensionHeaderNotification(teid uint32, seq uint16, ies ...*ie
 
 // Marshal returns the byte sequence generated from a SupportedExtensionHeaderNotification.
 func (e *SupportedExtensionHeaderNotification) Marshal() ([]byte, error) {
+	if e == nil || e.Header == nil {
+		return nil, ErrInvalidLength
+	}
 	b := make([]byte, e.MarshalLen())
 	if err := e.MarshalTo(b); err != nil {
 		return nil, err
@@ -49,37 +56,21 @@ func (e *SupportedExtensionHeaderNotification) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (e *SupportedExtensionHeaderNotification) MarshalTo(b []byte) error {
-	if len(b) < e.MarshalLen() {
-		return ErrTooShortToMarshal
+	if e == nil || e.Header == nil {
+		return ErrInvalidLength
 	}
-	e.Header.Payload = make([]byte, e.MarshalLen()-e.Header.MarshalLen())
-
-	offset := 0
-	if ie := e.ExtensionHeaderTypeList; ie != nil {
-		if err := ie.MarshalTo(e.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range e.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		if err := ie.MarshalTo(e.Header.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	e.Header.SetLength()
-	return e.Header.MarshalTo(b)
+	ies := []*ie.IE{e.ExtensionHeaderTypeList}
+	ies = append(ies, e.AdditionalIEs...)
+	return marshalIEs(e.Header, b, ies)
 }
 
 // ParseSupportedExtensionHeaderNotification decodes a given byte sequence as a SupportedExtensionHeaderNotification.
 func ParseSupportedExtensionHeaderNotification(b []byte) (*SupportedExtensionHeaderNotification, error) {
 	e := &SupportedExtensionHeaderNotification{}
 	if err := e.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return e, err
+		}
 		return nil, err
 	}
 	return e, nil
@@ -87,13 +78,17 @@ func ParseSupportedExtensionHeaderNotification(b []byte) (*SupportedExtensionHea
 
 // UnmarshalBinary decodes a given byte sequence as a SupportedExtensionHeaderNotification.
 func (e *SupportedExtensionHeaderNotification) UnmarshalBinary(b []byte) error {
+	if e == nil {
+		return ErrInvalidLength
+	}
+	*e = SupportedExtensionHeaderNotification{}
 	var err error
 	e.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(e.Header.Payload) < 2 {
-		return nil
+	if e.Header.Type != MsgTypeSupportedExtensionHeaderNotification {
+		return ErrInvalidMessageType
 	}
 
 	ies, err := ie.ParseMultiIEs(e.Header.Payload)
@@ -107,33 +102,33 @@ func (e *SupportedExtensionHeaderNotification) UnmarshalBinary(b []byte) error {
 		}
 		switch i.Type {
 		case ie.ExtensionHeaderTypeList:
-			e.ExtensionHeaderTypeList = i
+			if e.ExtensionHeaderTypeList == nil {
+				e.ExtensionHeaderTypeList = i
+			} else {
+				e.AdditionalIEs = append(e.AdditionalIEs, i)
+			}
 		default:
 			e.AdditionalIEs = append(e.AdditionalIEs, i)
 		}
 	}
-	return nil
+	return validateMandatory(e.Header.Type, e.Header.Payload)
 }
 
 // MarshalLen returns the serial length of Data.
 func (e *SupportedExtensionHeaderNotification) MarshalLen() int {
-	l := e.Header.MarshalLen() - len(e.Header.Payload)
-
-	if ie := e.ExtensionHeaderTypeList; ie != nil {
-		l += ie.MarshalLen()
+	if e == nil || e.Header == nil {
+		return 0
 	}
-
-	for _, ie := range e.AdditionalIEs {
-		if ie == nil {
-			continue
-		}
-		l += ie.MarshalLen()
-	}
-	return l
+	ies := []*ie.IE{e.ExtensionHeaderTypeList}
+	ies = append(ies, e.AdditionalIEs...)
+	return messageLen(e.Header, ies)
 }
 
 // SetLength sets the length in Length field.
 func (e *SupportedExtensionHeaderNotification) SetLength() {
+	if e == nil || e.Header == nil {
+		return
+	}
 	e.Length = uint16(e.MarshalLen() - 8)
 }
 
@@ -144,5 +139,8 @@ func (e *SupportedExtensionHeaderNotification) MessageTypeName() string {
 
 // TEID returns the TEID in human-readable string.
 func (e *SupportedExtensionHeaderNotification) TEID() uint32 {
+	if e == nil || e.Header == nil {
+		return 0
+	}
 	return e.Header.TEID
 }

@@ -10,6 +10,9 @@ import "io"
 //
 // Note: each flag should be set in 1 or 0.
 func NewExtendedCommonFlags(uasi, bdwi, pcri, vb, retloc, cpsr, ccrsi, unauthenticatedIMSI int) *IE {
+	if uasi < 0 || uasi > 1 || bdwi < 0 || bdwi > 1 || pcri < 0 || pcri > 1 || vb < 0 || vb > 1 || retloc < 0 || retloc > 1 || cpsr < 0 || cpsr > 1 || ccrsi < 0 || ccrsi > 1 || unauthenticatedIMSI < 0 || unauthenticatedIMSI > 1 {
+		return newErrorIE(ExtendedCommonFlags, ErrMalformed)
+	}
 	return New(
 		ExtendedCommonFlags,
 		[]byte{uint8(
@@ -20,6 +23,9 @@ func NewExtendedCommonFlags(uasi, bdwi, pcri, vb, retloc, cpsr, ccrsi, unauthent
 
 // ExtendedCommonFlags returns ExtendedCommonFlags value if type matches.
 func (i *IE) ExtendedCommonFlags() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != ExtendedCommonFlags {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -39,40 +45,64 @@ func (i *IE) MustExtendedCommonFlags() uint8 {
 
 // IsUASI checks if UASI flag exists in ExtendedCommonFlags.
 func (i *IE) IsUASI() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustExtendedCommonFlags() >> 7) & 0x01) != 0
 }
 
 // IsBDWI checks if BDWI flag exists in ExtendedCommonFlags.
 func (i *IE) IsBDWI() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustExtendedCommonFlags() >> 6) & 0x01) != 0
 }
 
 // IsPCRI checks if PCRI flag exists in ExtendedCommonFlags.
 func (i *IE) IsPCRI() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustExtendedCommonFlags() >> 5) & 0x01) != 0
 }
 
 // IsVB checks if VB flag exists in ExtendedCommonFlags.
 func (i *IE) IsVB() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustExtendedCommonFlags() >> 4) & 0x01) != 0
 }
 
 // IsRetLoc checks if RetLoc flag exists in ExtendedCommonFlags.
 func (i *IE) IsRetLoc() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustExtendedCommonFlags() >> 3) & 0x01) != 0
 }
 
 // IsCPSR checks if CPSR flag exists in ExtendedCommonFlags.
 func (i *IE) IsCPSR() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustExtendedCommonFlags() >> 2) & 0x01) != 0
 }
 
 // IsCCRSI checks if CCRSI flag exists in ExtendedCommonFlags.
 func (i *IE) IsCCRSI() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return ((i.MustExtendedCommonFlags() >> 1) & 0x01) != 0
 }
 
 // IsUnauthenticatedIMSI checks if UnauthenticatedIMSI flag exists in ExtendedCommonFlags.
 func (i *IE) IsUnauthenticatedIMSI() bool {
+	if i.Err() != nil {
+		return false
+	}
 	return (i.MustExtendedCommonFlags() & 0x01) != 0
 }

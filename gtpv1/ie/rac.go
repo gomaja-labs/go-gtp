@@ -8,6 +8,9 @@ import "io"
 
 // RAC returns RAC value if type matches.
 func (i *IE) RAC() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
 		if len(i.Payload) < 6 {

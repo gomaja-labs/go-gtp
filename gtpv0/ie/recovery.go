@@ -13,6 +13,9 @@ func NewRecovery(recovery uint8) *IE {
 
 // Recovery returns Recovery value if type matches.
 func (i *IE) Recovery() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != Recovery {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

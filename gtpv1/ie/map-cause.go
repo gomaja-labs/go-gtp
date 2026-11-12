@@ -13,6 +13,9 @@ func NewMAPCause(cause uint8) *IE {
 
 // MAPCause returns MAPCause in uint8 if type matches.
 func (i *IE) MAPCause() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != MAPCause {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

@@ -6,6 +6,10 @@ package ie
 
 import "encoding/binary"
 
+// TS 29.060 §7.7.31 carries NAS octets 3-z: TS 24.008 §10.5.6.3
+// limits ordinary PCO to 253 octets including the NAS IEI and length.
+const maxPCOPayloadLen = 251
+
 // ConfigurationProtocolOption represents a Configuration protocol option in PCO.
 type ConfigurationProtocolOption struct {
 	ProtocolID uint16
@@ -35,6 +39,13 @@ func (c *ConfigurationProtocolOption) Marshal() ([]byte, error) {
 
 // MarshalTo serializes ConfigurationProtocolOption.
 func (c *ConfigurationProtocolOption) MarshalTo(b []byte) error {
+	// TS 24.008 §10.5.6.3.1: option contents use a one-octet length.
+	if c == nil || len(c.Contents) > 255 || int(c.Length) != len(c.Contents) {
+		return ErrInvalidLength
+	}
+	if len(b) < c.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	binary.BigEndian.PutUint16(b[0:2], c.ProtocolID)
 	b[2] = c.Length
 	if c.Length != 0 {
@@ -56,22 +67,29 @@ func ParseConfigurationProtocolOption(b []byte) (*ConfigurationProtocolOption, e
 
 // UnmarshalBinary decodes given bytes into ConfigurationProtocolOption.
 func (c *ConfigurationProtocolOption) UnmarshalBinary(b []byte) error {
+	if c == nil {
+		return ErrMalformed
+	}
+	*c = ConfigurationProtocolOption{}
 	l := len(b)
 	if l < 3 {
 		return ErrTooShortToParse
 	}
 	c.ProtocolID = binary.BigEndian.Uint16(b[0:2])
 	c.Length = b[2]
-	if c.Length != 0 && l >= 3+int(c.Length) {
-		c.Contents = make([]byte, c.Length)
-		copy(c.Contents, b[3:3+int(c.Length)])
+	if int(c.Length) > l-3 {
+		return ErrInvalidLength
 	}
+	c.Contents = append([]byte(nil), b[3:3+int(c.Length)]...)
 
 	return nil
 }
 
 // MarshalLen returns the serial length of ConfigurationProtocolOption in int.
 func (c *ConfigurationProtocolOption) MarshalLen() int {
+	if c == nil {
+		return 0
+	}
 	return 3 + len(c.Contents)
 }
 
@@ -101,6 +119,15 @@ func (p *PCOPayload) Marshal() ([]byte, error) {
 
 // MarshalTo serializes PCOPayload.
 func (p *PCOPayload) MarshalTo(b []byte) error {
+	if p == nil || p.ConfigurationProtocol > 7 {
+		return ErrMalformed
+	}
+	if p.MarshalLen() > maxPCOPayloadLen {
+		return ErrInvalidLength
+	}
+	if len(b) < p.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	b[0] = (p.ConfigurationProtocol & 0x07) | 0x80
 	offset := 1
 	for _, opt := range p.ConfigurationProtocolOptions {
@@ -125,8 +152,15 @@ func ParsePCOPayload(b []byte) (*PCOPayload, error) {
 
 // UnmarshalBinary decodes given bytes into PCOPayload.
 func (p *PCOPayload) UnmarshalBinary(b []byte) error {
+	if p == nil {
+		return ErrMalformed
+	}
+	*p = PCOPayload{}
 	if len(b) == 0 {
 		return ErrTooShortToParse
+	}
+	if len(b) > maxPCOPayloadLen {
+		return ErrInvalidLength
 	}
 
 	p.ConfigurationProtocol = b[0] & 0x07
@@ -147,6 +181,9 @@ func (p *PCOPayload) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of PCOPayload in int.
 func (p *PCOPayload) MarshalLen() int {
+	if p == nil {
+		return 0
+	}
 	l := 1
 	for _, opt := range p.ConfigurationProtocolOptions {
 		l += opt.MarshalLen()
@@ -161,7 +198,7 @@ func NewProtocolConfigurationOptions(configProto uint8, options ...*Configuratio
 
 	i := New(ProtocolConfigurationOptions, make([]byte, pco.MarshalLen()))
 	if err := pco.MarshalTo(i.Payload); err != nil {
-		return nil
+		return newErrorIE(ProtocolConfigurationOptions, err)
 	}
 
 	return i
@@ -170,6 +207,9 @@ func NewProtocolConfigurationOptions(configProto uint8, options ...*Configuratio
 // ProtocolConfigurationOptions returns ProtocolConfigurationOptions in
 // PCOPayload type if the type of IE matches.
 func (i *IE) ProtocolConfigurationOptions() (*PCOPayload, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != ProtocolConfigurationOptions {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}

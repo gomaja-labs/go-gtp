@@ -8,6 +8,10 @@ import "io"
 
 // NewAuthenticationQuintuplet creates a new AuthenticationQuintuplet IE.
 func NewAuthenticationQuintuplet(rand, xres, ck, ik, autn []byte) *IE {
+	// TS 29.060 §7.7.35: fixed RAND/CK/IK and one-octet variable lengths.
+	if len(rand) != 16 || len(ck) != 16 || len(ik) != 16 || len(xres) > 255 || len(autn) > 255 {
+		return newErrorIE(AuthenticationQuintuplet, ErrInvalidLength)
+	}
 	xresLen := len(xres)
 	autnLen := len(autn)
 	i := New(AuthenticationQuintuplet, make([]byte, 16+1+xresLen+16+16+1+autnLen))
@@ -30,6 +34,9 @@ func NewAuthenticationQuintuplet(rand, xres, ck, ik, autn []byte) *IE {
 
 // AuthenticationQuintuplet returns AuthenticationQuintuplet in []byte if type matches.
 func (i *IE) AuthenticationQuintuplet() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != AuthenticationQuintuplet {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -49,6 +56,9 @@ func (i *IE) MustAuthenticationQuintuplet() []byte {
 
 // XRES returns XRES in []byte if type matches.
 func (i *IE) XRES() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if len(i.Payload) == 0 {
 		return nil, nil
 	}
@@ -78,6 +88,9 @@ func (i *IE) MustXRES() []byte {
 
 // CK returns CK in []byte if type matches.
 func (i *IE) CK() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case AuthenticationQuintuplet:
 		if len(i.Payload) < 18 {
@@ -103,6 +116,9 @@ func (i *IE) MustCK() []byte {
 
 // IK returns IK in []byte if type matches.
 func (i *IE) IK() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case AuthenticationQuintuplet:
 		if len(i.Payload) < 34 {
@@ -128,17 +144,25 @@ func (i *IE) MustIK() []byte {
 
 // AUTN returns AUTN in []byte if type matches.
 func (i *IE) AUTN() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case AuthenticationQuintuplet:
 		if len(i.Payload) < 50 {
 			return nil, io.ErrUnexpectedEOF
 		}
+		// TS 29.060 §7.7.35 Figure 49: AUTN length follows XRES, CK and IK.
 		offset := 49 + int(i.Payload[16])
-		autnLen := i.Payload[50]
-		if len(i.Payload) < offset+int(autnLen) {
+		if offset >= len(i.Payload) {
 			return nil, io.ErrUnexpectedEOF
 		}
-		return i.Payload[offset : offset+int(autnLen)], nil
+		n := int(i.Payload[offset])
+		offset++
+		if n > len(i.Payload)-offset {
+			return nil, io.ErrUnexpectedEOF
+		}
+		return i.Payload[offset : offset+n], nil
 	default:
 		return nil, &InvalidTypeError{Type: i.Type}
 	}

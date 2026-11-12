@@ -14,6 +14,9 @@ func NewReorderingRequired(required bool) *IE {
 
 // ReorderingRequired returns ReorderingRequired or not if type matches.
 func (i *IE) ReorderingRequired() bool {
+	if i.Err() != nil {
+		return false
+	}
 	if i.Type != ReorderingRequired {
 		return false
 	}

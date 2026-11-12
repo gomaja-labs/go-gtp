@@ -8,19 +8,26 @@ import "io"
 
 // NewNSAPI creates a new NSAPI IE.
 func NewNSAPI(nsapi uint8) *IE {
+	if nsapi > 15 {
+		return newErrorIE(NSAPI, ErrMalformed)
+	}
 	return newUint8ValIE(NSAPI, nsapi)
 }
 
 // NSAPI returns NSAPI value if type matches.
 func (i *IE) NSAPI() (uint8, error) {
-	if i.Type != NSAPI {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
+	if i.Type != NSAPI && i.Type != TEIDDataII {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
 	if len(i.Payload) == 0 {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return i.Payload[0], nil
+	// TS 29.060 §7.7.17: ignore the spare high nibble.
+	return i.Payload[0] & 0x0f, nil
 }
 
 // MustNSAPI returns NSAPI in uint8 if type matches.

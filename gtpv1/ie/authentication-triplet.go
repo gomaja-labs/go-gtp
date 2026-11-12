@@ -8,6 +8,10 @@ import "io"
 
 // NewAuthenticationTriplet creates a new AuthenticationTriplet IE.
 func NewAuthenticationTriplet(rand, sres, kc []byte) *IE {
+	// TS 29.060 §7.7.7; GSM 09.60 §7.9.8: fixed authentication field widths.
+	if len(rand) != 16 || len(sres) != 4 || len(kc) != 8 {
+		return newErrorIE(AuthenticationTriplet, ErrInvalidLength)
+	}
 	i := New(AuthenticationTriplet, make([]byte, 28))
 
 	copy(i.Payload[0:16], rand)
@@ -18,6 +22,9 @@ func NewAuthenticationTriplet(rand, sres, kc []byte) *IE {
 
 // AuthenticationTriplet returns AuthenticationTriplet in []byte if type matches.
 func (i *IE) AuthenticationTriplet() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != AuthenticationTriplet {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -33,6 +40,9 @@ func (i *IE) MustAuthenticationTriplet() []byte {
 
 // RAND returns RAND in []byte if type matches.
 func (i *IE) RAND() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case AuthenticationTriplet, AuthenticationQuintuplet:
 		if len(i.Payload) < 16 {
@@ -53,6 +63,9 @@ func (i *IE) MustRAND() []byte {
 
 // SRES returns SRES in []byte if type matches.
 func (i *IE) SRES() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case AuthenticationTriplet:
 		if len(i.Payload) < 20 {
@@ -73,6 +86,9 @@ func (i *IE) MustSRES() []byte {
 
 // Kc returns Kc in []byte if type matches.
 func (i *IE) Kc() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case AuthenticationTriplet:
 		if len(i.Payload) < 28 {
