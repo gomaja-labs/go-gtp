@@ -88,13 +88,19 @@ func (pkt pktConn4) DSCPECN() (int, error) {
 func (pkt pktConn4) WriteToWithDSCPECN(p []byte, addr net.Addr, dscpecn int) (n int, err error) {
 	pkt.mu.Lock()
 	defer pkt.mu.Unlock()
+	// DSCP/ECN 0 is the socket default, which every marked write restores, so
+	// a write with 0 needs no socket option. Plain writes therefore also work
+	// where golang.org/x/net cannot read or set the field (IPv6 on Windows,
+	// https://github.com/golang/go/issues/7174).
+	if dscpecn == 0 {
+		return pkt.WriteTo(p, addr)
+	}
 	oldDSCPECN, err := pkt.DSCPECN()
 	if err != nil {
 		return 0, err
 	}
 	// Nothing to set nor restore when the socket already uses the requested
-	// value, which is the common case (WriteTo always requests 0): this saves
-	// two setsockopt calls per packet.
+	// value.
 	if oldDSCPECN == dscpecn {
 		return pkt.WriteTo(p, addr)
 	}
@@ -157,13 +163,19 @@ func (pkt pktConn6) DSCPECN() (int, error) {
 func (pkt pktConn6) WriteToWithDSCPECN(p []byte, addr net.Addr, dscpecn int) (n int, err error) {
 	pkt.mu.Lock()
 	defer pkt.mu.Unlock()
+	// DSCP/ECN 0 is the socket default, which every marked write restores, so
+	// a write with 0 needs no socket option. Plain writes therefore also work
+	// where golang.org/x/net cannot read or set the field (IPv6 on Windows,
+	// https://github.com/golang/go/issues/7174).
+	if dscpecn == 0 {
+		return pkt.WriteTo(p, addr)
+	}
 	oldDSCPECN, err := pkt.DSCPECN()
 	if err != nil {
 		return 0, err
 	}
 	// Nothing to set nor restore when the socket already uses the requested
-	// value, which is the common case (WriteTo always requests 0): this saves
-	// two setsockopt calls per packet.
+	// value.
 	if oldDSCPECN == dscpecn {
 		return pkt.WriteTo(p, addr)
 	}
@@ -207,19 +219,32 @@ func newPktConn(laddr net.Addr) (pktConn, error) {
 	return pc, err
 }
 
+// Receiving the destination address of each datagram (IP_PKTINFO and
+// IPV6_PKTINFO) lets Error Indication name the address a T-PDU was sent to
+// when the socket is bound to a wildcard address (TS 29.281 §7.3.1).
+// golang.org/x/net does not implement these control messages on every
+// platform; on Windows see https://github.com/golang/go/issues/7175. There
+// the connection works without them, and Error Indication falls back to the
+// bound address, refusing to name a wildcard one. The variables let tests
+// exercise that path.
+var (
+	receiveDst4 = func(pc *ipv4.PacketConn) error { return pc.SetControlMessage(ipv4.FlagDst, true) }
+	receiveDst6 = func(pc *ipv6.PacketConn) error { return pc.SetControlMessage(ipv6.FlagDst, true) }
+)
+
 // newPktConnFromUDPConn wraps conn in a pktConn, choosing IPv4 or IPv6 from ip.
 func newPktConnFromUDPConn(conn *net.UDPConn, ip net.IP) (pktConn, error) {
 	if ip.To4() != nil {
 		pc := ipv4.NewPacketConn(conn)
-		if err := pc.SetControlMessage(ipv4.FlagDst, true); err != nil {
-			return nil, err
+		if err := receiveDst4(pc); err != nil {
+			logf("GTP-U destination addresses unavailable on %s: %v", conn.LocalAddr(), err)
 		}
 		return pktConn4{mu: &sync.Mutex{}, udpConn: conn, PacketConn: pc}, nil
 	}
 	if ip.To16() != nil || ip == nil {
 		pc := ipv6.NewPacketConn(conn)
-		if err := pc.SetControlMessage(ipv6.FlagDst, true); err != nil {
-			return nil, err
+		if err := receiveDst6(pc); err != nil {
+			logf("GTP-U destination addresses unavailable on %s: %v", conn.LocalAddr(), err)
 		}
 		return pktConn6{mu: &sync.Mutex{}, udpConn: conn, PacketConn: pc}, nil
 	}

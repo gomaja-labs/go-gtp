@@ -10,6 +10,8 @@ import (
 
 	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv1/message"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 func TestPayloadBacklogDoesNotDelayEcho(t *testing.T) {
@@ -137,5 +139,39 @@ func TestPayloadDeadlineOnClosedConnection(t *testing.T) {
 	}
 	if err := u.SetReadDeadline(time.Time{}); !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("closed deadline: %v", err)
+	}
+}
+
+// TestWithoutDestinationAddresses covers platforms where golang.org/x/net
+// cannot report the destination address of received datagrams (Windows,
+// https://github.com/golang/go/issues/7175): the connection must still work,
+// and Error Indication must use the bound address or refuse to name a
+// wildcard one (TS 29.281 §7.3.1).
+func TestWithoutDestinationAddresses(t *testing.T) {
+	unavailable := errors.New("not implemented")
+	old4, old6 := receiveDst4, receiveDst6
+	receiveDst4 = func(*ipv4.PacketConn) error { return unavailable }
+	receiveDst6 = func(*ipv6.PacketConn) error { return unavailable }
+	t.Cleanup(func() { receiveDst4, receiveDst6 = old4, old6 })
+
+	tpdu := message.NewTPDU(0x1234, []byte{1})
+	sink := listenUDP(t, "127.0.0.1", 0)
+
+	bound, err := NewUPlaneConnFromUDPConn(listenUDP(t, "127.0.0.1", 0))
+	if err != nil {
+		t.Fatalf("connection without destination addresses: %v", err)
+	}
+	t.Cleanup(func() { _ = bound.Close() })
+	if err := bound.ErrorIndication(sink.LocalAddr(), tpdu); err != nil {
+		t.Errorf("Error Indication from a bound address: %v", err)
+	}
+
+	wildcard, err := NewUPlaneConnFromUDPConn(listenUDP(t, "0.0.0.0", 0))
+	if err != nil {
+		t.Fatalf("wildcard connection without destination addresses: %v", err)
+	}
+	t.Cleanup(func() { _ = wildcard.Close() })
+	if err := wildcard.ErrorIndication(sink.LocalAddr(), tpdu); !errors.Is(err, ErrInvalidConnection) {
+		t.Errorf("Error Indication from a wildcard address without its destination: %v, want ErrInvalidConnection", err)
 	}
 }

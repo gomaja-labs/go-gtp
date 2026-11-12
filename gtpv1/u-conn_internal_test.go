@@ -6,6 +6,7 @@ package gtpv1
 
 import (
 	"net"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -38,6 +39,14 @@ func TestWriteToWithDSCPECN(t *testing.T) {
 			dscp, ok := pkt.(interface{ DSCPECN() (int, error) })
 			if !ok {
 				t.Fatalf("%T does not expose DSCPECN", pkt)
+			}
+
+			if _, err := dscp.DSCPECN(); err != nil {
+				// DSCP/ECN 0 needs no socket option, so plain writes still work.
+				if _, err := pkt.WriteToWithDSCPECN([]byte{0}, dst.LocalAddr(), 0); err != nil {
+					t.Fatalf("plain write: %v", err)
+				}
+				t.Skipf("DSCP/ECN unsupported on %s/%s: %v (https://github.com/golang/go/issues/7174)", runtime.GOOS, runtime.GOARCH, err)
 			}
 
 			// 0 matches the socket default (fast path), 0xb8 (EF) must be

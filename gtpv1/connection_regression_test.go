@@ -5,12 +5,15 @@ import (
 	"context"
 	"errors"
 	"net"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv1/message"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 func listenUDP(t *testing.T, ip string, port int) *net.UDPConn {
@@ -133,6 +136,7 @@ func TestLargeDatagramDelivery(t *testing.T) {
 }
 
 func TestErrorIndicationWildcardDestinationAndPort(t *testing.T) {
+	requireDestinationAddresses(t, "udp4")
 	// TS 29.281 §§4.4.2.4, 7.3.1: notify port 2152 with the original destination address.
 	sock := listenUDP(t, "0.0.0.0", 0)
 	u := serveUDP(t, sock, nil)
@@ -187,6 +191,7 @@ func TestRequiredExtensionBeforeRelay(t *testing.T) {
 }
 
 func TestEchoWildcardSourceAndSequence(t *testing.T) {
+	requireDestinationAddresses(t, "udp4")
 	sock := listenUDP(t, "0.0.0.0", 0)
 	u := serveUDP(t, sock, nil)
 	sender := listenUDP(t, "127.0.0.1", 0)
@@ -267,6 +272,7 @@ func TestHandshakeCorrelation(t *testing.T) {
 }
 
 func TestIPv6WildcardDestination(t *testing.T) {
+	requireDestinationAddresses(t, "udp6")
 	sock, err := net.ListenUDP("udp6", &net.UDPAddr{IP: net.IPv6unspecified})
 	if err != nil {
 		t.Fatal(err)
@@ -313,5 +319,29 @@ func TestConcurrentCloseUnblocksRead(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("reader did not unblock")
+	}
+}
+
+// requireDestinationAddresses skips a test that needs the destination address
+// of received datagrams where golang.org/x/net cannot report it (Windows:
+// https://github.com/golang/go/issues/7175).
+func requireDestinationAddresses(t *testing.T, network string) {
+	t.Helper()
+	ip := net.IPv4(127, 0, 0, 1)
+	if network == "udp6" {
+		ip = net.IPv6loopback
+	}
+	c, err := net.ListenUDP(network, &net.UDPAddr{IP: ip})
+	if err != nil {
+		t.Skipf("%s loopback unavailable: %v", network, err)
+	}
+	defer func() { _ = c.Close() }()
+	if network == "udp6" {
+		err = ipv6.NewPacketConn(c).SetControlMessage(ipv6.FlagDst, true)
+	} else {
+		err = ipv4.NewPacketConn(c).SetControlMessage(ipv4.FlagDst, true)
+	}
+	if err != nil {
+		t.Skipf("destination addresses of received datagrams unavailable on %s/%s: %v (https://github.com/golang/go/issues/7175)", runtime.GOOS, runtime.GOARCH, err)
 	}
 }

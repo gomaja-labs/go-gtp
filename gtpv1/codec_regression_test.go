@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/gomaja-labs/go-gtp/gtpv1/message"
 	"io"
 	"net"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gomaja-labs/go-gtp/gtpv1/message"
 )
 
 type testPacketConn struct {
@@ -91,11 +92,19 @@ func TestRelayShortPacket(t *testing.T) {
 		_ = u.serve(ctx)
 		return
 	}
-	c := exec.Command(os.Args[0], "-test.run=^TestRelayShortPacket$", "-test.timeout=3s")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skipf("cannot locate the test binary: %v", err)
+	}
+	c := exec.Command(exe, "-test.run=^TestRelayShortPacket$", "-test.timeout=3s")
 	c.Env = append(os.Environ(), "GTPV1_SHORT_RELAY_PACKET_CHILD=1")
 	out, err := c.CombinedOutput()
-	if err != nil {
-		t.Fatalf("short relay datagram crashed process: %s", out)
+	var exit *exec.ExitError
+	switch {
+	case errors.As(err, &exit):
+		t.Fatalf("short relay datagram crashed process: %v\n%s", err, out)
+	case err != nil:
+		t.Fatalf("cannot run the test binary: %v", err)
 	}
 }
 func TestRelayMapRace(t *testing.T) {
