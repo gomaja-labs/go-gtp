@@ -30,7 +30,11 @@ func main() {
 		log.Printf("failed to initialize P-GW: %s", err)
 		return
 	}
-	defer pgw.close()
+	defer func() {
+		if err := pgw.close(); err != nil {
+			log.Printf("close: %v", err)
+		}
+	}()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGHUP)

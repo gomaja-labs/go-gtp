@@ -38,7 +38,7 @@ type UpdateBearerResponse struct {
 	AdditionalIEs                      []*ie.IE
 }
 
-// NewUpdateBearerRequest creates a new UpdateBearerRequest.
+// NewUpdateBearerResponse creates a new UpdateBearerResponse.
 func NewUpdateBearerResponse(teid, seq uint32, ies ...*ie.IE) *UpdateBearerResponse {
 	c := &UpdateBearerResponse{
 		Header: NewHeader(

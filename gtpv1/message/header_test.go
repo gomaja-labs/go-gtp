@@ -5,6 +5,7 @@
 package message_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/gomaja-labs/go-gtp/gtpv1/internal/testutils"
@@ -246,7 +247,7 @@ func TestHeaderErrorDetection(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Description, func(t *testing.T) {
 			_, err := message.ParseHeader(c.Serialized)
-			if err != c.Error {
+			if !errors.Is(err, c.Error) {
 				t.Fatalf("got '%v' want '%v'", err, c.Error)
 			}
 		})

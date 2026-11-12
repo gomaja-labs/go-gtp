@@ -29,7 +29,11 @@ func main() {
 	if err != nil {
 		log.Printf("failed to initialize SGW: %s", err)
 	}
-	defer sgw.close()
+	defer func() {
+		if err := sgw.close(); err != nil {
+			log.Printf("close: %v", err)
+		}
+	}()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGHUP)

@@ -74,7 +74,11 @@ func main() {
 	}
 
 	uConn = gtpv1.NewUPlaneConn(s5uAddr)
-	defer uConn.Close()
+	defer func() {
+		if err := uConn.Close(); err != nil {
+			log.Printf("close: %v", err)
+		}
+	}()
 
 	go func() {
 		if err = uConn.ListenAndServe(ctx); err != nil {

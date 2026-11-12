@@ -2,8 +2,7 @@
 
 Package gtp provides simple and painless handling of GTP (GPRS Tunneling Protocol) in the Go programming language.
 
-![CI status](https://github.com/gomaja-labs/go-gtp/actions/workflows/go.yml/badge.svg)
-[![golangci-lint](https://github.com/gomaja-labs/go-gtp/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/gomaja-labs/go-gtp/actions/workflows/golangci-lint.yml)
+[![ci](https://github.com/gomaja-labs/go-gtp/actions/workflows/ci.yml/badge.svg)](https://github.com/gomaja-labs/go-gtp/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/gomaja-labs/go-gtp.svg)](https://pkg.go.dev/github.com/gomaja-labs/go-gtp)
 [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/gomaja-labs/go-gtp/blob/main/LICENSE)
 
@@ -35,7 +34,7 @@ _This project follows [the Release Policy of Go](https://golang.org/doc/devel/re
 
 #### End-to-end
 
-We have a set of tools called GW Tester at [`examples/gw-tester`](./examples/gw-tester). See the [document](./examples/gw-tester/README.md) for how it works and how to run it. It is also used for the integration test of this project. [Workflow setting](./.github/workflows/go.yml) may help you understand it as well.
+We have a set of tools called GW Tester at [`examples/gw-tester`](./examples/gw-tester). See the [document](./examples/gw-tester/README.md) for how it works and how to run it. It is also the integration test of this project: [`e2e.sh`](./examples/gw-tester/e2e.sh) attaches every configured subscriber through all four nodes, and CI runs it on each change.
 
 #### Individual node
 

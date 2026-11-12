@@ -28,7 +28,11 @@ func main() {
 	if err != nil {
 		log.Printf("failed to initialize eNB: %s", err)
 	}
-	defer enb.close()
+	defer func() {
+		if err := enb.close(); err != nil {
+			log.Printf("close: %v", err)
+		}
+	}()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGHUP)

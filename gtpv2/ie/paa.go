@@ -29,7 +29,7 @@ func NewPDNAddressAllocation(addr string) *IE {
 	return NewPDNAddressAllocationNetIP(net.ParseIP(addr), 0)
 }
 
-// NewPDNAddressAllocation creates a new PDNAddressAllocation IE with IPv6 value.
+// NewPDNAddressAllocationIPv6 creates a new PDNAddressAllocation IE with IPv6 value.
 func NewPDNAddressAllocationIPv6(addr string, prefix uint8) *IE {
 	return NewPDNAddressAllocationNetIP(net.ParseIP(addr), prefix)
 }

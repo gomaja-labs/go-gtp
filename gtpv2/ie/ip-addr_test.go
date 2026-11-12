@@ -1,6 +1,7 @@
 package ie_test
 
 import (
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -74,7 +75,7 @@ func TestPDNAddressAllocationIP(t *testing.T) {
 				if diff := cmp.Diff(ip, v); diff != "" {
 					t.Error(diff)
 				}
-			} else if err != io.ErrUnexpectedEOF {
+			} else if !errors.Is(err, io.ErrUnexpectedEOF) {
 				t.Error(err)
 			}
 		})

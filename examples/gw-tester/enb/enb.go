@@ -444,10 +444,10 @@ func (e *enb) runHTTPProbe(ctx context.Context, sub *Subscriber) error {
 
 		if rsp.StatusCode == http.StatusOK {
 			log.Printf("[HTTP Probe;%s] Successfully GET %s: Status: %s", sub.IMSI, sub.HTTPURL, rsp.Status)
-			rsp.Body.Close()
+			_ = rsp.Body.Close()
 			continue
 		}
-		rsp.Body.Close()
+		_ = rsp.Body.Close()
 		e.errCh <- fmt.Errorf("got invalid response on HTTP probe: %v", rsp.StatusCode)
 	}
 }

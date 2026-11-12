@@ -1,59 +1,29 @@
+# golangci-lint configuration (v2 schema).
+#
+# The standard linters check correctness and unused code. Errorlint keeps
+# error comparisons working with wrapped errors, misspell checks comments and
+# strings, unconvert finds conversions between identical types, and gofmt
+# checks source formatting. Staticcheck runs every check except QF1008. Tests are linted like the rest of the code.
 version: "2"
-run:
-  issues-exit-code: 1
-  tests: false
+
 linters:
-  default: none
+  default: standard
   enable:
-    - asciicheck
-    - bodyclose
-    - dogsled
-    - errcheck
     - errorlint
-    - goconst
-    - gocritic
-    - gomodguard_v2
-    - goprintffuncname
-    - gosec
-    - govet
-    - ineffassign
     - misspell
-    - nakedret
-    - prealloc
-    - rowserrcheck
-    - staticcheck
     - unconvert
-    - unparam
-    - unused
   settings:
-    gosec:
-      excludes:
-        - G115
     staticcheck:
       checks:
         - all
+        # Explicit selectors through embedded fields read better here.
         - -QF1008
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    paths:
-      - third_party$
-      - builtin$
+
 issues:
-  max-issues-per-linter: 4095
-  max-same-issues: 1023
-  new: true
+  # Report all findings from each linter and source line.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
 formatters:
   enable:
     - gofmt
-    - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

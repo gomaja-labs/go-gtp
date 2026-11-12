@@ -83,7 +83,11 @@ func main() {
 		log.Println(err)
 		return
 	}
-	defer s11Conn.Close()
+	defer func() {
+		if err := s11Conn.Close(); err != nil {
+			log.Printf("close: %v", err)
+		}
+	}()
 	log.Printf("Connection established with %s", raddr.String())
 
 	// register handlers for ALL the message you expect remote endpoint to send.
@@ -102,7 +106,11 @@ func main() {
 	}
 
 	uConn = gtpv1.NewUPlaneConn(enbUPlaneAddr)
-	defer uConn.Close()
+	defer func() {
+		if err := uConn.Close(); err != nil {
+			log.Printf("close: %v", err)
+		}
+	}()
 
 	go func() {
 		if err = uConn.ListenAndServe(ctx); err != nil {

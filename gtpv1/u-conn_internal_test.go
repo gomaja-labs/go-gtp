@@ -23,7 +23,7 @@ func TestWriteToWithDSCPECN(t *testing.T) {
 			if err != nil {
 				t.Skipf("loopback not available: %v", err)
 			}
-			defer dst.Close()
+			defer func() { _ = dst.Close() }()
 
 			src, err := net.ListenUDP("udp", &net.UDPAddr{IP: tc.ip})
 			if err != nil {
@@ -33,7 +33,7 @@ func TestWriteToWithDSCPECN(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer pkt.Close()
+			defer func() { _ = pkt.Close() }()
 
 			dscp, ok := pkt.(interface{ DSCPECN() (int, error) })
 			if !ok {
@@ -77,7 +77,7 @@ func BenchmarkWriteToWithDSCPECN(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 	go func() {
 		buf := make([]byte, 2048)
 		for {
@@ -95,7 +95,7 @@ func BenchmarkWriteToWithDSCPECN(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer pkt.Close()
+	defer func() { _ = pkt.Close() }()
 
 	payload := make([]byte, 1280)
 	b.ReportAllocs()

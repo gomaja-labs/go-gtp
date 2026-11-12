@@ -102,8 +102,8 @@ func newSGW(s11, s5c, s1u, s5u net.Addr) *sGateway {
 
 func (s *sGateway) run() error {
 	defer func() {
-		s.s11Conn.Close()
-		s.s5cConn.Close()
+		_ = s.s11Conn.Close()
+		_ = s.s5cConn.Close()
 	}()
 
 	// wait for events(logs, errors, timers).
