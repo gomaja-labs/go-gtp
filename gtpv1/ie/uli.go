@@ -22,7 +22,7 @@ const (
 func NewUserLocationInformationWithCGI(mcc, mnc string, lac, cgi uint16) *IE {
 	plmn, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
+		return newErrorIE(UserLocationInformation, err)
 	}
 
 	uli := New(
@@ -41,7 +41,7 @@ func NewUserLocationInformationWithCGI(mcc, mnc string, lac, cgi uint16) *IE {
 func NewUserLocationInformationWithSAI(mcc, mnc string, lac, sac uint16) *IE {
 	plmn, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
+		return newErrorIE(UserLocationInformation, err)
 	}
 
 	uli := New(
@@ -60,7 +60,7 @@ func NewUserLocationInformationWithSAI(mcc, mnc string, lac, sac uint16) *IE {
 func NewUserLocationInformationWithRAI(mcc, mnc string, lac uint16, rac uint8) *IE {
 	plmn, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
+		return newErrorIE(UserLocationInformation, err)
 	}
 
 	uli := New(
@@ -77,6 +77,9 @@ func NewUserLocationInformationWithRAI(mcc, mnc string, lac uint16, rac uint8) *
 
 // UserLocationInformation returns UserLocationInformation value if type matches.
 func (i *IE) UserLocationInformation() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != UserLocationInformation {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -92,6 +95,9 @@ func (i *IE) MustUserLocationInformation() []byte {
 
 // CGI returns CGI value if type matches.
 func (i *IE) CGI() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != UserLocationInformation {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -117,6 +123,9 @@ func (i *IE) MustCGI() uint16 {
 
 // SAC returns SAC value if type matches.
 func (i *IE) SAC() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != UserLocationInformation {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

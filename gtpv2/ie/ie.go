@@ -4,6 +4,11 @@
 
 /*
 Package ie provides encoding/decoding feature of GTPv2 Information Elements.
+
+Constructors retain invalid input errors in the returned IE; Err and accessors
+report them, and Marshal/MarshalTo propagate them, including through messages.
+MarshalLen returns zero for nil IEs and IEs carrying construction errors.
+Nil IEs report ErrIENotFound. Must and Has helpers return zero values on errors.
 */
 package ie
 
@@ -164,11 +169,28 @@ const (
 
 // IE is a GTPv2 Information Element.
 type IE struct {
+	err      error
 	Type     uint8
 	Length   uint16
 	instance uint8
 	Payload  []byte
 	ChildIEs []*IE
+}
+
+// Err reports a construction error, including the IE type, or ErrIENotFound
+// for a nil receiver. Errors remain available through errors.Is/errors.As.
+func (i *IE) Err() error {
+	if i == nil {
+		return ErrIENotFound
+	}
+	if i.err != nil {
+		return fmt.Errorf("IE type %d: %w", i.Type, i.err)
+	}
+	return nil
+}
+
+func newErrorIE(t uint8, err error) *IE {
+	return &IE{Type: t, err: err}
 }
 
 // New creates new IE.
@@ -185,17 +207,26 @@ func New(itype, ins uint8, data []byte) *IE {
 
 // SetInstance sets the instance.
 func (i *IE) SetInstance(ins uint8) {
+	if i == nil {
+		return
+	}
 	i.instance = ins & 0x0f
 }
 
 // WithInstance sets the instance and returns IE.
 func (i *IE) WithInstance(ins uint8) *IE {
+	if i == nil {
+		return nil
+	}
 	i.instance = ins & 0x0f
 	return i
 }
 
 // Instance returns instance value in uint8
 func (i *IE) Instance() uint8 {
+	if i == nil {
+		return 0
+	}
 	return i.instance & 0x0f
 }
 
@@ -210,20 +241,23 @@ func (i *IE) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (i *IE) MarshalTo(b []byte) error {
+	if err := i.Err(); err != nil {
+		return err
+	}
 	l := len(b)
-	if l < 4 {
-		return io.ErrUnexpectedEOF
+	if l < i.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	if i.MarshalLen()-4 > 0xffff || int(i.Length) != i.MarshalLen()-4 {
+		return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
 	}
 
 	b[0] = i.Type
 	binary.BigEndian.PutUint16(b[1:3], i.Length)
-	b[3] = i.instance
+	b[3] = i.instance & 0x0f
 	if i.IsGrouped() {
 		offset := 4
 		for _, ie := range i.ChildIEs {
-			if l < offset+ie.MarshalLen() {
-				break
-			}
 
 			if err := ie.MarshalTo(b[offset : offset+ie.MarshalLen()]); err != nil {
 				return err
@@ -231,10 +265,6 @@ func (i *IE) MarshalTo(b []byte) error {
 			offset += ie.MarshalLen()
 		}
 		return nil
-	}
-
-	if l < i.MarshalLen() {
-		return io.ErrUnexpectedEOF
 	}
 
 	copy(b[4:i.MarshalLen()], i.Payload)
@@ -252,9 +282,13 @@ func Parse(b []byte) (*IE, error) {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in GTPv2 IE.
 func (i *IE) UnmarshalBinary(b []byte) error {
+	if i == nil {
+		return ErrIENotFound
+	}
+	*i = IE{}
 	l := len(b)
 	if l < 4 {
-		return io.ErrUnexpectedEOF
+		return ErrTooShortToParse
 	}
 
 	i.Type = b[0]
@@ -263,7 +297,8 @@ func (i *IE) UnmarshalBinary(b []byte) error {
 		return ErrInvalidLength
 	}
 
-	i.instance = b[3]
+	// TS 29.274 §8.2.1: only the low four bits encode the instance.
+	i.instance = b[3] & 0x0f
 	i.Payload = b[4 : 4+int(i.Length)]
 
 	if i.IsGrouped() {
@@ -279,6 +314,9 @@ func (i *IE) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns field length in integer.
 func (i *IE) MarshalLen() int {
+	if i == nil || i.err != nil {
+		return 0
+	}
 	if i.IsGrouped() {
 		l := 4
 		for _, ie := range i.ChildIEs {
@@ -291,18 +329,33 @@ func (i *IE) MarshalLen() int {
 
 // SetLength sets the length in Length field.
 func (i *IE) SetLength() {
+	if i == nil {
+		return
+	}
 	if i.IsGrouped() {
 		l := 0
 		for _, ie := range i.ChildIEs {
 			l += ie.MarshalLen()
 		}
+		if l > 0xffff {
+			i.err = ErrInvalidLength
+			return
+		}
 		i.Length = uint16(l)
+		return
+	}
+	if len(i.Payload) > 0xffff {
+		i.err = ErrInvalidLength
+		return
 	}
 	i.Length = uint16(len(i.Payload))
 }
 
 // Name returns the name of IE in string.
 func (i *IE) Name() string {
+	if i == nil {
+		return "Undefined"
+	}
 	if n, ok := ieTypeNameMap[i.Type]; ok {
 		return n
 	}
@@ -373,11 +426,18 @@ func NewStringIE(t uint8, v string) *IE {
 
 // NewFQDNIE creates a new IE with FQDN value.
 func NewFQDNIE(t uint8, v string) *IE {
-	return New(t, 0x00, utils.EncodeFQDN(v))
+	b, err := utils.EncodeFQDN(v)
+	if err != nil {
+		return newErrorIE(t, err)
+	}
+	return New(t, 0x00, b)
 }
 
 // ValueAsUint8 returns the value of IE as uint8.
 func (i *IE) ValueAsUint8() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.IsGrouped() {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -390,6 +450,9 @@ func (i *IE) ValueAsUint8() (uint8, error) {
 
 // ValueAsUint16 returns the value of IE as uint16.
 func (i *IE) ValueAsUint16() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.IsGrouped() {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -402,6 +465,9 @@ func (i *IE) ValueAsUint16() (uint16, error) {
 
 // ValueAsUint32 returns the value of IE as uint32.
 func (i *IE) ValueAsUint32() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.IsGrouped() {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -414,6 +480,9 @@ func (i *IE) ValueAsUint32() (uint32, error) {
 
 // ValueAsUint64 returns the value of IE as uint64.
 func (i *IE) ValueAsUint64() (uint64, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.IsGrouped() {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -426,6 +495,9 @@ func (i *IE) ValueAsUint64() (uint64, error) {
 
 // ValueAsString returns the value of IE as string.
 func (i *IE) ValueAsString() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.IsGrouped() {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -435,11 +507,14 @@ func (i *IE) ValueAsString() (string, error) {
 
 // ValueAsFQDN returns the value of IE as string, decoded as FQDN.
 func (i *IE) ValueAsFQDN() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.IsGrouped() {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
 
-	return utils.DecodeFQDN(i.Payload), nil
+	return utils.DecodeFQDN(i.Payload)
 }
 
 var ieTypeNameMap = map[uint8]string{

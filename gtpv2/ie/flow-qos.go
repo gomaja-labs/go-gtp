@@ -15,7 +15,7 @@ func NewFlowQoS(qci uint8, umbr, dmbr, ugbr, dgbr uint64) *IE {
 	v := NewFlowQoSFields(qci, umbr, dmbr, ugbr, dgbr)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(FlowQoS, err)
 	}
 
 	return New(FlowQoS, 0x00, b)
@@ -23,6 +23,9 @@ func NewFlowQoS(qci uint8, umbr, dmbr, ugbr, dgbr uint64) *IE {
 
 // FlowQoS returns FlowQoS in FlowQoSFields type if the type of IE matches.
 func (i *IE) FlowQoS() (*FlowQoSFields, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case FlowQoS:
 		return ParseFlowQoSFields(i.Payload)
@@ -69,10 +72,26 @@ func (f *FlowQoSFields) MarshalTo(b []byte) error {
 
 	b[0] = f.QCI
 
-	copy(b[1:6], utils.Uint64To40(f.MaximumBitRateForUplink))
-	copy(b[6:11], utils.Uint64To40(f.MaximumBitRateForDownlink))
-	copy(b[11:16], utils.Uint64To40(f.GuaranteedBitRateForUplink))
-	copy(b[16:21], utils.Uint64To40(f.GuaranteedBitRateForDownlink))
+	encoded, err := utils.Uint64To40(f.MaximumBitRateForUplink)
+	if err != nil {
+		return err
+	}
+	copy(b[1:6], encoded)
+	encoded, err = utils.Uint64To40(f.MaximumBitRateForDownlink)
+	if err != nil {
+		return err
+	}
+	copy(b[6:11], encoded)
+	encoded, err = utils.Uint64To40(f.GuaranteedBitRateForUplink)
+	if err != nil {
+		return err
+	}
+	copy(b[11:16], encoded)
+	encoded, err = utils.Uint64To40(f.GuaranteedBitRateForDownlink)
+	if err != nil {
+		return err
+	}
+	copy(b[16:21], encoded)
 
 	return nil
 }

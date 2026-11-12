@@ -6,22 +6,24 @@ package ie
 
 import (
 	"io"
-	"strings"
 
 	"github.com/gomaja-labs/go-gtp/utils"
 )
 
 // NewMSISDN creates a new MSISDN IE.
 func NewMSISDN(msisdn string) *IE {
-	m, err := utils.StrToSwappedBytes(msisdn, "f")
+	m, err := utils.EncodeBCDDigits(msisdn)
 	if err != nil {
-		return nil
+		return newErrorIE(MSISDN, err)
 	}
 	return New(MSISDN, 0x00, m)
 }
 
 // MSISDN returns MSISDN in string if the type of IE matches.
 func (i *IE) MSISDN() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != MSISDN {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -29,8 +31,7 @@ func (i *IE) MSISDN() (string, error) {
 		return "", io.ErrUnexpectedEOF
 	}
 
-	str := utils.SwappedBytesToStr(i.Payload, false)
-	return strings.TrimSuffix(str, "f"), nil
+	return utils.DecodeBCDDigits(i.Payload)
 }
 
 // MustMSISDN returns MSISDN in string, ignoring errors.

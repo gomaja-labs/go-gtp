@@ -14,7 +14,7 @@ import (
 func NewPLMNID(mcc, mnc string) *IE {
 	encoded, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
+		return newErrorIE(PLMNID, err)
 	}
 
 	return New(PLMNID, 0x00, encoded)
@@ -22,6 +22,9 @@ func NewPLMNID(mcc, mnc string) *IE {
 
 // PLMNID returns PLMNID(MCC and MNC) in string if the type of IE matches.
 func (i *IE) PLMNID() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != PLMNID {
 		return "", &InvalidTypeError{Type: i.Type}
 	}

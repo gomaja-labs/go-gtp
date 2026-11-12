@@ -67,7 +67,7 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 		{
 			name: "Test getting MCC and MNC from ULI from MENBI",
 			i: NewUserLocationInformationStruct(
-				nil, nil, nil, nil, nil, nil, NewMENBI("890", "12", 0x11111111), nil,
+				nil, nil, nil, nil, nil, nil, NewMENBI("890", "12", 0x111111), nil,
 			),
 			wantMCC: "890",
 			wantMNC: "12",
@@ -75,7 +75,7 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 		{
 			name: "Test getting MCC and MNC from ULI from EMENBI",
 			i: NewUserLocationInformationStruct(
-				nil, nil, nil, nil, nil, nil, nil, NewEMENBI("321", "54", 0x22222222),
+				nil, nil, nil, nil, nil, nil, nil, NewEMENBI("321", "54", 0x222222),
 			),
 			wantMCC: "321",
 			wantMNC: "54",
@@ -98,8 +98,8 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 				NewTAI("567", "89", 0x5555),
 				NewECGI("678", "90", 0x66666666),
 				NewLAI("789", "01", 0x1111),
-				NewMENBI("890", "12", 0x11111111),
-				NewEMENBI("321", "54", 0x22222222),
+				NewMENBI("890", "12", 0x111111),
+				NewEMENBI("321", "54", 0x222222),
 			),
 			wantMCC: "123",
 			wantMNC: "45",

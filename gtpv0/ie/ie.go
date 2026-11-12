@@ -4,6 +4,11 @@
 
 /*
 Package ie provides encoding/decoding feature of GTPv0 Information Elements.
+
+Constructors retain invalid input errors in the returned IE; Err and accessors
+report them, and Marshal/MarshalTo propagate them, including through messages.
+MarshalLen returns zero for nil IEs and IEs carrying construction errors.
+Nil IEs report ErrIENotFound. Must and Has helpers return zero values on errors.
 */
 package ie
 
@@ -49,9 +54,26 @@ const (
 
 // IE is a GTPv0 Information Element.
 type IE struct {
+	err     error
 	Type    uint8
 	Length  uint16
 	Payload []byte
+}
+
+// Err reports a construction error, including the IE type, or ErrIENotFound
+// for a nil receiver. Errors remain available through errors.Is/errors.As.
+func (i *IE) Err() error {
+	if i == nil {
+		return ErrIENotFound
+	}
+	if i.err != nil {
+		return fmt.Errorf("IE type %d: %w", i.Type, i.err)
+	}
+	return nil
+}
+
+func newErrorIE(t uint8, err error) *IE {
+	return &IE{Type: t, err: err}
 }
 
 // New creates new IE.
@@ -72,6 +94,16 @@ func (i *IE) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (i *IE) MarshalTo(b []byte) error {
+	if err := i.Err(); err != nil {
+		return err
+	}
+	if i.IsTV() {
+		if l, ok := tvLengthMap[i.Type]; ok && len(i.Payload) != l {
+			return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
+		}
+	} else if len(i.Payload) > 0xffff || int(i.Length) != len(i.Payload) {
+		return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
+	}
 	if len(b) < i.MarshalLen() {
 		return ErrTooShortToMarshal
 	}
@@ -97,6 +129,10 @@ func Parse(b []byte) (*IE, error) {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in GTPv0 IE.
 func (i *IE) UnmarshalBinary(b []byte) error {
+	if i == nil {
+		return ErrIENotFound
+	}
+	*i = IE{}
 	if len(b) < 2 {
 		return ErrTooShortToParse
 	}
@@ -161,11 +197,14 @@ var tvLengthMap = map[uint8]int{
 
 // IsTV checks if a IE is TV format. If false, it indicates the IE has Length inside.
 func (i *IE) IsTV() bool {
-	return int(i.Type) < 0x80
+	return i != nil && int(i.Type) < 0x80
 }
 
 // MarshalLen returns the serial length of IE.
 func (i *IE) MarshalLen() int {
+	if i == nil || i.err != nil {
+		return 0
+	}
 	if l, ok := tvLengthMap[i.Type]; ok {
 		return l + 1
 	}
@@ -177,16 +216,26 @@ func (i *IE) MarshalLen() int {
 
 // SetLength sets the length in Length field.
 func (i *IE) SetLength() {
+	if i == nil {
+		return
+	}
 	if _, ok := tvLengthMap[i.Type]; ok {
 		i.Length = 0
 		return
 	}
 
+	if len(i.Payload) > 0xffff {
+		i.err = ErrInvalidLength
+		return
+	}
 	i.Length = uint16(len(i.Payload))
 }
 
 // Name returns the name of IE in string.
 func (i *IE) Name() string {
+	if i == nil {
+		return "Undefined"
+	}
 	if n, ok := ieTypeNameMap[i.Type]; ok {
 		return n
 	}

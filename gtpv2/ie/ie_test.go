@@ -415,8 +415,8 @@ var cases = []struct {
 			ie.NewTAI("123", "45", 0x5555),
 			ie.NewECGI("123", "45", 0x66666666),
 			ie.NewLAI("123", "45", 0x1111),
-			ie.NewMENBI("123", "45", 0x11111111),
-			ie.NewEMENBI("123", "45", 0x22222222),
+			ie.NewMENBI("123", "45", 0x111111),
+			ie.NewEMENBI("123", "45", 0x222222),
 		),
 		[]byte{
 			0x56, 0x00, 0x33, 0x00,
@@ -665,7 +665,7 @@ func TestIEs(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			opt := cmp.AllowUnexported(*got, *c.structured)
+			opt := cmp.AllowUnexported(*got, *c.structured, ie.TFTPFComponent{})
 			if diff := cmp.Diff(got, c.structured, opt); diff != "" {
 				t.Error(diff)
 			}

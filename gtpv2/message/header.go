@@ -71,7 +71,11 @@ func (h *Header) MarshalTo(b []byte) error {
 		binary.BigEndian.PutUint32(b[offset:offset+4], h.TEID)
 		offset += 4
 	}
-	copy(b[offset:offset+3], utils.Uint32To24(h.SequenceNumber))
+	encoded, err := utils.Uint32To24(h.SequenceNumber)
+	if err != nil {
+		return err
+	}
+	copy(b[offset:offset+3], encoded)
 	b[offset+3] = h.Spare
 	copy(b[offset+4:h.MarshalLen()], h.Payload)
 

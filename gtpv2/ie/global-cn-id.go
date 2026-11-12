@@ -16,7 +16,7 @@ func NewGlobalCNID(mcc, mnc string, cnid uint16) *IE {
 	i := New(GlobalCNID, 0x00, make([]byte, 5))
 	plmn, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
+		return newErrorIE(GlobalCNID, err)
 	}
 	copy(i.Payload[0:3], plmn)
 
@@ -27,6 +27,9 @@ func NewGlobalCNID(mcc, mnc string, cnid uint16) *IE {
 
 // CNID returns CNID in uinte16 if the type of IE matches.
 func (i *IE) CNID() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if len(i.Payload) < 5 {
 		return 0, io.ErrUnexpectedEOF
 	}

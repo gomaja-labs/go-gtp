@@ -212,7 +212,7 @@ func NewUserLocationInformationStruct(cgi *CGI, sai *SAI, rai *RAI, tai *TAI, ec
 	v := NewUserLocationInformationFields(cgi, sai, rai, tai, ecgi, lai, menbi, emenbi)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(UserLocationInformation, err)
 	}
 
 	return New(UserLocationInformation, 0x00, b)
@@ -221,6 +221,9 @@ func NewUserLocationInformationStruct(cgi *CGI, sai *SAI, rai *RAI, tai *TAI, ec
 // UserLocationInformation returns UserLocationInformation in UserLocationInformationFields type
 // if the type of IE matches.
 func (i *IE) UserLocationInformation() (*UserLocationInformationFields, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case UserLocationInformation:
 		return ParseUserLocationInformationFields(i.Payload)
@@ -396,7 +399,11 @@ func (f *UserLocationInformationFields) MarshalTo(b []byte) error {
 			return err
 		}
 		copy(b[offset:offset+3], plmn)
-		copy(b[offset+3:offset+6], utils.Uint32To24(f.MENBI.MENBI))
+		encoded, err := utils.Uint32To24(f.MENBI.MENBI)
+		if err != nil {
+			return err
+		}
+		copy(b[offset+3:offset+6], encoded)
 		offset += menbilen
 	}
 	if has8thBit(f.Flags) { // EMENBI
@@ -409,7 +416,11 @@ func (f *UserLocationInformationFields) MarshalTo(b []byte) error {
 			return err
 		}
 		copy(b[offset:offset+3], plmn)
-		copy(b[offset+3:offset+6], utils.Uint32To24(f.EMENBI.EMENBI))
+		encoded, err := utils.Uint32To24(f.EMENBI.EMENBI)
+		if err != nil {
+			return err
+		}
+		copy(b[offset+3:offset+6], encoded)
 	}
 
 	return nil

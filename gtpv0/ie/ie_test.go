@@ -236,7 +236,7 @@ func TestIE(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if diff := cmp.Diff(got, c.structured); diff != "" {
+			if diff := cmp.Diff(got, c.structured, cmp.AllowUnexported(ie.IE{})); diff != "" {
 				t.Error(err)
 			}
 		})

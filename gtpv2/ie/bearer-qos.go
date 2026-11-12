@@ -16,7 +16,7 @@ func NewBearerQoS(pci, pl, pvi, qci uint8, umbr, dmbr, ugbr, dgbr uint64) *IE {
 	v := NewBearerQoSFields(pci, pl, pvi, qci, umbr, dmbr, ugbr, dgbr)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(BearerQoS, err)
 	}
 
 	return New(BearerQoS, 0x00, b)
@@ -24,6 +24,9 @@ func NewBearerQoS(pci, pl, pvi, qci uint8, umbr, dmbr, ugbr, dgbr uint64) *IE {
 
 // BearerQoS returns BearerQoS in BearerQoSFields type if the type of IE matches.
 func (i *IE) BearerQoS() (*BearerQoSFields, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case BearerQoS:
 		return ParseBearerQoSFields(i.Payload)
@@ -85,10 +88,26 @@ func (f *BearerQoSFields) MarshalTo(b []byte) error {
 	b[0] = f.ARP
 	b[1] = f.QCI
 
-	copy(b[2:7], utils.Uint64To40(f.MaximumBitRateForUplink))
-	copy(b[7:12], utils.Uint64To40(f.MaximumBitRateForDownlink))
-	copy(b[12:17], utils.Uint64To40(f.GuaranteedBitRateForUplink))
-	copy(b[17:22], utils.Uint64To40(f.GuaranteedBitRateForDownlink))
+	encoded, err := utils.Uint64To40(f.MaximumBitRateForUplink)
+	if err != nil {
+		return err
+	}
+	copy(b[2:7], encoded)
+	encoded, err = utils.Uint64To40(f.MaximumBitRateForDownlink)
+	if err != nil {
+		return err
+	}
+	copy(b[7:12], encoded)
+	encoded, err = utils.Uint64To40(f.GuaranteedBitRateForUplink)
+	if err != nil {
+		return err
+	}
+	copy(b[12:17], encoded)
+	encoded, err = utils.Uint64To40(f.GuaranteedBitRateForDownlink)
+	if err != nil {
+		return err
+	}
+	copy(b[17:22], encoded)
 
 	return nil
 }
@@ -127,6 +146,9 @@ func (f *BearerQoSFields) MarshalLen() int {
 
 // QCILabel returns QCILabel in uint8 if the type of IE matches.
 func (i *IE) QCILabel() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case BearerQoS:
 		if len(i.Payload) < 2 {
@@ -142,6 +164,9 @@ func (i *IE) QCILabel() (uint8, error) {
 
 // MBRForUplink returns MBRForUplink in uint64 if the type of IE matches.
 func (i *IE) MBRForUplink() (uint64, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case BearerQoS:
 		if len(i.Payload) < 7 {
@@ -152,7 +177,8 @@ func (i *IE) MBRForUplink() (uint64, error) {
 		if len(i.Payload) < 6 {
 			return 0, io.ErrUnexpectedEOF
 		}
-		return utils.Uint40To64(i.Payload[2:6]), nil
+		// TS 29.274 §8.16: five uplink-rate octets follow the QCI.
+		return utils.Uint40To64(i.Payload[1:6]), nil
 	default:
 		return 0, io.ErrUnexpectedEOF
 	}
@@ -167,6 +193,9 @@ func (i *IE) MustMBRForUplink() uint64 {
 
 // MBRForDownlink returns MBRForDownlink in uint64 if the type of IE matches.
 func (i *IE) MBRForDownlink() (uint64, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case BearerQoS:
 		if len(i.Payload) < 12 {
@@ -192,6 +221,9 @@ func (i *IE) MustMBRForDownlink() uint64 {
 
 // GBRForUplink returns GBRForUplink in uint64 if the type of IE matches.
 func (i *IE) GBRForUplink() (uint64, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case BearerQoS:
 		if len(i.Payload) < 17 {
@@ -217,6 +249,9 @@ func (i *IE) MustGBRForUplink() uint64 {
 
 // GBRForDownlink returns GBRForDownlink in uint64 if the type of IE matches.
 func (i *IE) GBRForDownlink() (uint64, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case BearerQoS:
 		if len(i.Payload) < 22 {

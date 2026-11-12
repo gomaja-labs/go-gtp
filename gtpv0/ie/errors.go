@@ -11,9 +11,10 @@ import (
 
 // Error definitions.
 var (
-	ErrInvalidLength     = errors.New("got invalid length")
-	ErrTooShortToMarshal = errors.New("too short to Marshal")
-	ErrTooShortToParse   = errors.New("too short to Parse as GTPv0 IE")
+	ErrIENotFound        = errors.New("IE not found")
+	ErrInvalidLength     = errors.New("invalid IE length")
+	ErrTooShortToMarshal = errors.New("too short to marshal IE")
+	ErrTooShortToParse   = errors.New("too short to parse IE")
 
 	ErrMalformed = errors.New("malformed IE")
 )

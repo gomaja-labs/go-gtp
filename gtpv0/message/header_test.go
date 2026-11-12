@@ -55,3 +55,10 @@ func TestHeader(t *testing.T) {
 		return v, nil
 	})
 }
+
+func TestTIDFormattingPreservesNSAPI(t *testing.T) {
+	m := message.NewCreatePDPContextRequest(0, 0, 0x21436587092143a5)
+	if got := m.TID(); got != "123456789012345a" {
+		t.Fatalf("TID = %q", got)
+	}
+}

@@ -7,8 +7,6 @@ package message
 import (
 	"encoding/binary"
 	"fmt"
-
-	"github.com/gomaja-labs/go-gtp/utils"
 )
 
 // Header is a GTPv1 common header.
@@ -133,7 +131,11 @@ func (h *Header) tid() string {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, h.TID)
 
-	return utils.SwappedBytesToStr(b, false)
+	// GSM 09.60 §7.2: preserve the NSAPI nibble alongside the IMSI digits.
+	for n := range b {
+		b[n] = b[n]>>4 | b[n]<<4
+	}
+	return fmt.Sprintf("%x", b)
 }
 
 // Version returns the GTP version.

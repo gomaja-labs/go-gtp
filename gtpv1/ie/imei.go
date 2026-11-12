@@ -6,30 +6,31 @@ package ie
 
 import (
 	"io"
-	"strings"
 
 	"github.com/gomaja-labs/go-gtp/utils"
 )
 
 // NewIMEISV creates a new IMEISV IE.
 func NewIMEISV(imei string) *IE {
-	i, err := utils.StrToSwappedBytes(imei, "f")
+	i, err := utils.EncodeBCDDigits(imei)
 	if err != nil {
-		return nil
+		return newErrorIE(IMEISV, err)
 	}
 	return New(IMEISV, i)
 }
 
 // IMEISV returns IMEISV value if type matches.
 func (i *IE) IMEISV() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != IMEISV {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
 	if len(i.Payload) == 0 {
 		return "", io.ErrUnexpectedEOF
 	}
-	str := utils.SwappedBytesToStr(i.Payload, false)
-	return strings.TrimSuffix(str, "f"), nil
+	return utils.DecodeBCDDigits(i.Payload)
 }
 
 // MustIMEISV returns IMEISV in string if type matches.

@@ -26,7 +26,7 @@ func TestBCDEncoding(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run("Str2Bytes/"+c.description, func(t *testing.T) {
-			swapped, err := utils.StrToSwappedBytes(c.str, "f")
+			swapped, err := utils.EncodeTBCD(c.str)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -37,7 +37,10 @@ func TestBCDEncoding(t *testing.T) {
 		})
 
 		t.Run("Bytes2Str/"+c.description, func(t *testing.T) {
-			str := utils.SwappedBytesToStr(c.bytes, true)
+			str, err := utils.DecodeTBCD(c.bytes)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if diff := cmp.Diff(str, c.str); diff != "" {
 				t.Error(diff)
@@ -69,7 +72,10 @@ func TestUint32And24(t *testing.T) {
 		})
 
 		t.Run("32To24"+c.description, func(t *testing.T) {
-			converted := utils.Uint32To24(c.u32)
+			converted, err := utils.Uint32To24(c.u32)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if diff := cmp.Diff(converted, c.u24); diff != "" {
 				t.Error(diff)
@@ -101,7 +107,10 @@ func TestUint64And40(t *testing.T) {
 		})
 
 		t.Run("64To40/"+c.description, func(t *testing.T) {
-			converted := utils.Uint64To40(c.u64)
+			converted, err := utils.Uint64To40(c.u64)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if diff := cmp.Diff(converted, c.u40); diff != "" {
 				t.Error(diff)

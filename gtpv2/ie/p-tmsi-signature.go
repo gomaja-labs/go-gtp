@@ -5,23 +5,29 @@
 package ie
 
 import (
-	"io"
-
 	"github.com/gomaja-labs/go-gtp/utils"
 )
 
 // NewPTMSISignature creates a new PTMSISignature IE.
 func NewPTMSISignature(sig uint32) *IE {
-	return New(PTMSISignature, 0x00, utils.Uint32To24(sig))
+	b, err := utils.Uint32To24(sig)
+	if err != nil {
+		return newErrorIE(PTMSISignature, err)
+	}
+	return New(PTMSISignature, 0x00, b)
 }
 
 // PTMSISignature returns PTMSISignature value in uint32 if type matches.
 func (i *IE) PTMSISignature() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != PTMSISignature {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
-	if len(i.Payload) < 1 {
-		return 0, io.ErrUnexpectedEOF
+	// TS 29.274 §8.42: the signature occupies three octets.
+	if len(i.Payload) < 3 {
+		return 0, ErrTooShortToParse
 	}
 
 	return utils.Uint24To32(i.Payload), nil

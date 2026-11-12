@@ -201,7 +201,7 @@ func TestTrafficFlowTemplate(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if diff := cmp.Diff(f.PacketFilters, c.filters); diff != "" {
+			if diff := cmp.Diff(f.PacketFilters, c.filters, cmp.AllowUnexported(ie.TFTPFComponent{})); diff != "" {
 				t.Error(diff)
 			}
 

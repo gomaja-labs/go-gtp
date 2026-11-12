@@ -12,11 +12,18 @@ import (
 
 // NewPTMSISignature creates a new PTMSISignature IE.
 func NewPTMSISignature(sig uint32) *IE {
-	return New(PTMSISignature, utils.Uint32To24(sig))
+	b, err := utils.Uint32To24(sig)
+	if err != nil {
+		return newErrorIE(PTMSISignature, err)
+	}
+	return New(PTMSISignature, b)
 }
 
 // PTMSISignature returns PTMSISignature value in uint32 if type matches.
 func (i *IE) PTMSISignature() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != PTMSISignature {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}

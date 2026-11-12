@@ -357,7 +357,7 @@ func DialUPlane(ctx context.Context, laddr, raddr net.Addr) (*UPlaneConn, error)
 
 // ListenAndServe creates a new GTPv2-C *Conn and start serving.
 // This blocks, and returns error only if it face the fatal one. Non-fatal errors are logged
-// with logger. See SetLogger/EnableLogger/DisableLogger for handling of those logs.
+// with the configured logger. See SetLogger for configuration.
 func (u *UPlaneConn) ListenAndServe(ctx context.Context) error {
 	if u.pktConn == nil {
 		var err error

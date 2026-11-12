@@ -11,11 +11,12 @@ import (
 
 // Error definitions.
 var (
-	ErrTooShortToParse = errors.New("too short to decode as GTP")
-	ErrInvalidLength   = errors.New("length value is invalid")
+	ErrTooShortToMarshal = errors.New("too short to marshal IE")
+	ErrTooShortToParse   = errors.New("too short to parse IE")
+	ErrInvalidLength     = errors.New("invalid IE length")
 
 	ErrInvalidType     = errors.New("invalid type")
-	ErrIENotFound      = errors.New("could not find the specified IE in a grouped IE")
+	ErrIENotFound      = errors.New("IE not found")
 	ErrIEValueNotFound = errors.New("could not find the specified value in an IE")
 
 	ErrMalformed = errors.New("malformed IE")

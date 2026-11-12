@@ -14,7 +14,7 @@ import (
 func NewServingNetwork(mcc, mnc string) *IE {
 	encoded, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
+		return newErrorIE(ServingNetwork, err)
 	}
 
 	return New(ServingNetwork, 0x00, encoded)
@@ -22,6 +22,9 @@ func NewServingNetwork(mcc, mnc string) *IE {
 
 // ServingNetwork returns ServingNetwork(MCC and MNC) in string if the type of IE matches.
 func (i *IE) ServingNetwork() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != ServingNetwork {
 		return "", &InvalidTypeError{Type: i.Type}
 	}

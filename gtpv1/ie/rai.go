@@ -12,21 +12,16 @@ import (
 
 // NewRouteingAreaIdentity creates a new RouteingAreaIdentity IE.
 func NewRouteingAreaIdentity(mcc, mnc string, lac uint16, rac uint8) *IE {
-	mc, err := utils.StrToSwappedBytes(mcc, "f")
+	plmn, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
-	}
-	mn, err := utils.StrToSwappedBytes(mnc, "f")
-	if err != nil {
-		return nil
+		return newErrorIE(RouteingAreaIdentity, err)
 	}
 
 	rai := New(
 		RouteingAreaIdentity,
 		make([]byte, 6),
 	)
-	copy(rai.Payload[0:2], mc)
-	rai.Payload[2] = mn[0]
+	copy(rai.Payload[0:3], plmn)
 	binary.BigEndian.PutUint16(rai.Payload[3:5], lac)
 	rai.Payload[5] = rac
 
@@ -35,6 +30,9 @@ func NewRouteingAreaIdentity(mcc, mnc string, lac uint16, rac uint8) *IE {
 
 // RouteingAreaIdentity returns RouteingAreaIdentity value if type matches.
 func (i *IE) RouteingAreaIdentity() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != RouteingAreaIdentity {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}

@@ -13,6 +13,9 @@ import (
 
 // MCC returns MCC in string if the type of IE matches.
 func (i *IE) MCC() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if len(i.Payload) < 3 {
 		return "", io.ErrUnexpectedEOF
 	}
@@ -68,6 +71,9 @@ func (i *IE) MustMCC() string {
 
 // MNC returns MNC in string if the type of IE matches.
 func (i *IE) MNC() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if len(i.Payload) < 3 {
 		return "", io.ErrUnexpectedEOF
 	}

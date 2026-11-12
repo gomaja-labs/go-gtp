@@ -12,15 +12,18 @@ import (
 
 // NewIMSI creates a new IMSI IE.
 func NewIMSI(imsi string) *IE {
-	i, err := utils.StrToSwappedBytes(imsi, "f")
+	i, err := utils.EncodeBCDDigits(imsi)
 	if err != nil {
-		return New(IMSI, nil)
+		return newErrorIE(IMSI, err)
 	}
 	return New(IMSI, i)
 }
 
 // IMSI returns IMSI value in string if type matches.
 func (i *IE) IMSI() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != IMSI {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -28,7 +31,7 @@ func (i *IE) IMSI() (string, error) {
 		return "", io.ErrUnexpectedEOF
 	}
 
-	return utils.SwappedBytesToStr(i.Payload, true), nil
+	return utils.DecodeBCDDigits(i.Payload)
 }
 
 // MustIMSI returns IMSI in string if type matches.

@@ -15,7 +15,7 @@ func NewTraceReference(mcc, mnc string, traceID uint32) *IE {
 	v := NewTraceReferenceFields(mcc, mnc, traceID)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(TraceReference, err)
 	}
 
 	return New(TraceReference, 0x00, b)
@@ -62,7 +62,11 @@ func (f *TraceReferenceFields) MarshalTo(b []byte) error {
 	if l < 6 {
 		return io.ErrUnexpectedEOF
 	}
-	copy(b[3:6], utils.Uint32To24(f.TraceID))
+	encoded, err := utils.Uint32To24(f.TraceID)
+	if err != nil {
+		return err
+	}
+	copy(b[3:6], encoded)
 
 	return nil
 }
@@ -105,6 +109,9 @@ func (f *TraceReferenceFields) MarshalLen() int {
 
 // TraceID returns TraceID in uint32 if the type of IE matches.
 func (i *IE) TraceID() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case TraceReference, TraceInformation:
 		if len(i.Payload) < 6 {

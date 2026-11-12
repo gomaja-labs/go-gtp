@@ -17,8 +17,8 @@ func TestNewUserLocationInformationStruct(t *testing.T) {
 			NewTAI("123", "45", 0x5555),
 			NewECGI("123", "45", 0x66666666),
 			NewLAI("123", "45", 0x1111),
-			NewMENBI("123", "45", 0x11111111),
-			NewEMENBI("123", "45", 0x22222222),
+			NewMENBI("123", "45", 0x111111),
+			NewEMENBI("123", "45", 0x222222),
 		)
 		if uli == nil {
 			t.Fatalf("Error in NewUserLocationInformationStruct")

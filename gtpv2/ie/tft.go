@@ -15,6 +15,9 @@ import (
 
 // TrafficFlowTemplate returns TrafficFlowTemplate struct if the type of IE matches.
 func (i *IE) TrafficFlowTemplate() (*TrafficFlowTemplate, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case BearerTFT, TrafficAggregateDescription:
 		return ParseTrafficFlowTemplate(i.Payload)
@@ -354,6 +357,7 @@ const (
 
 // TFTPFComponent represents a component in Packet Fileter in TFT.
 type TFTPFComponent struct {
+	err      error
 	Type     uint8
 	Contents []byte
 }
@@ -440,7 +444,8 @@ func NewTFTPFComponentTypeOfServiceTrafficClass(class, mask uint8) *TFTPFCompone
 
 // NewTFTPFComponentFlowLabel creates a new TFTPFComponent of type FlowLabel.
 func NewTFTPFComponentFlowLabel(label uint32) *TFTPFComponent {
-	return NewTFTPFComponent(PFCompFlowLabel, utils.Uint32To24(label))
+	b, err := utils.Uint32To24(label)
+	return &TFTPFComponent{Type: PFCompFlowLabel, Contents: b, err: err}
 }
 
 // NewTFTPFComponentDestinationMACAddress creates a new TFTPFComponent of type DestinationMACAddress.
@@ -649,6 +654,9 @@ func (c *TFTPFComponent) TypeOfServiceTrafficClass() (uint8, uint8, error) {
 
 // FlowLabel returns FlowLabel in uint32 if the type of component matches.
 func (c *TFTPFComponent) FlowLabel() (uint32, error) {
+	if c.err != nil {
+		return 0, c.err
+	}
 	if c.Type != PFCompFlowLabel {
 		return 0, ErrInvalidType
 	}
@@ -757,6 +765,9 @@ func (c *TFTPFComponent) Marshal() ([]byte, error) {
 
 // MarshalTo serializes TFTPFComponent into b.
 func (c *TFTPFComponent) MarshalTo(b []byte) error {
+	if c.err != nil {
+		return c.err
+	}
 	if len(b) < 1+len(c.Contents) {
 		return io.ErrUnexpectedEOF
 	}

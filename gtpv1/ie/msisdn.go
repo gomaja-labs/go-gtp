@@ -12,15 +12,18 @@ import (
 
 // NewMSISDN creates a new MSISDN IE.
 func NewMSISDN(msisdn string) *IE {
-	i, err := utils.StrToSwappedBytes("19"+msisdn, "f")
+	i, err := utils.EncodeBCDDigits("19" + msisdn)
 	if err != nil {
-		return nil
+		return newErrorIE(MSISDN, err)
 	}
 	return New(MSISDN, i)
 }
 
 // MSISDN returns MSISDN value if type matches.
 func (i *IE) MSISDN() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != MSISDN {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -28,7 +31,7 @@ func (i *IE) MSISDN() (string, error) {
 		return "", io.ErrUnexpectedEOF
 	}
 
-	return utils.SwappedBytesToStr(i.Payload[1:], false), nil
+	return utils.DecodeBCDDigits(i.Payload[1:])
 }
 
 // MustMSISDN returns MSISDN in string if type matches.

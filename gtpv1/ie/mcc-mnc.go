@@ -12,17 +12,22 @@ import (
 
 // MCC returns MCC value if type matches.
 func (i *IE) MCC() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
-		if len(i.Payload) < 2 {
-			return "", io.ErrUnexpectedEOF
-		}
-		return utils.DecodeMCC(i.Payload[0:2]), nil
-	case UserLocationInformation:
 		if len(i.Payload) < 3 {
 			return "", io.ErrUnexpectedEOF
 		}
-		return utils.DecodeMCC(i.Payload[1:3]), nil
+		mcc, _, err := utils.DecodePLMN(i.Payload[0:3])
+		return mcc, err
+	case UserLocationInformation:
+		if len(i.Payload) < 4 {
+			return "", io.ErrUnexpectedEOF
+		}
+		mcc, _, err := utils.DecodePLMN(i.Payload[1:4])
+		return mcc, err
 	default:
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -37,17 +42,22 @@ func (i *IE) MustMCC() string {
 
 // MNC returns MNC value if type matches.
 func (i *IE) MNC() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
 		if len(i.Payload) < 3 {
 			return "", io.ErrUnexpectedEOF
 		}
-		return utils.DecodeMNC(i.Payload[1:3]), nil
+		_, mnc, err := utils.DecodePLMN(i.Payload[0:3])
+		return mnc, err
 	case UserLocationInformation:
 		if len(i.Payload) < 4 {
 			return "", io.ErrUnexpectedEOF
 		}
-		return utils.DecodeMNC(i.Payload[2:4]), nil
+		_, mnc, err := utils.DecodePLMN(i.Payload[1:4])
+		return mnc, err
 	default:
 		return "", &InvalidTypeError{Type: i.Type}
 	}

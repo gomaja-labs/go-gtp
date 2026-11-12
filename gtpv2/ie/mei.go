@@ -6,16 +6,15 @@ package ie
 
 import (
 	"io"
-	"strings"
 
 	"github.com/gomaja-labs/go-gtp/utils"
 )
 
 // NewMobileEquipmentIdentity creates a new MobileEquipmentIdentity IE.
 func NewMobileEquipmentIdentity(mei string) *IE {
-	m, err := utils.StrToSwappedBytes(mei, "f")
+	m, err := utils.EncodeBCDDigits(mei)
 	if err != nil {
-		return nil
+		return newErrorIE(MobileEquipmentIdentity, err)
 	}
 	return New(MobileEquipmentIdentity, 0x00, m)
 }
@@ -23,6 +22,9 @@ func NewMobileEquipmentIdentity(mei string) *IE {
 // MobileEquipmentIdentity returns MobileEquipmentIdentity in string if the
 // type of IE matches.
 func (i *IE) MobileEquipmentIdentity() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != MobileEquipmentIdentity {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -30,8 +32,7 @@ func (i *IE) MobileEquipmentIdentity() (string, error) {
 		return "", io.ErrUnexpectedEOF
 	}
 
-	str := utils.SwappedBytesToStr(i.Payload, false)
-	return strings.TrimSuffix(str, "f"), nil
+	return utils.DecodeBCDDigits(i.Payload)
 }
 
 // MustMobileEquipmentIdentity returns MobileEquipmentIdentity in string, ignoring errors.

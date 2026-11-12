@@ -15,7 +15,7 @@ import (
 func NewRouteingAreaIdentity(mcc, mnc string, lac uint16, rac uint8) *IE {
 	plmn, err := utils.EncodePLMN(mcc, mnc)
 	if err != nil {
-		return nil
+		return newErrorIE(RouteingAreaIdentity, err)
 	}
 
 	rai := New(
@@ -31,6 +31,9 @@ func NewRouteingAreaIdentity(mcc, mnc string, lac uint16, rac uint8) *IE {
 
 // RouteingAreaIdentity returns RouteingAreaIdentity value if type matches.
 func (i *IE) RouteingAreaIdentity() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != RouteingAreaIdentity {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
@@ -46,12 +49,16 @@ func (i *IE) MustRouteingAreaIdentity() []byte {
 
 // MCC returns MCC value if type matches.
 func (i *IE) MCC() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
-		if len(i.Payload) < 2 {
+		if len(i.Payload) < 3 {
 			return "", io.ErrUnexpectedEOF
 		}
-		return utils.SwappedBytesToStr(i.Payload[0:2], false), nil
+		mcc, _, err := utils.DecodePLMN(i.Payload[:3])
+		return mcc, err
 	default:
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -66,12 +73,16 @@ func (i *IE) MustMCC() string {
 
 // MNC returns MNC value if type matches.
 func (i *IE) MNC() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
-		if len(i.Payload) < 2 {
+		if len(i.Payload) < 3 {
 			return "", io.ErrUnexpectedEOF
 		}
-		return utils.SwappedBytesToStr(i.Payload[1:2], true), nil
+		_, mnc, err := utils.DecodePLMN(i.Payload[:3])
+		return mnc, err
 	default:
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -86,6 +97,9 @@ func (i *IE) MustMNC() string {
 
 // LAC returns LAC value if type matches.
 func (i *IE) LAC() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
 		if len(i.Payload) < 5 {
@@ -106,6 +120,9 @@ func (i *IE) MustLAC() uint16 {
 
 // RAC returns RAC value if type matches.
 func (i *IE) RAC() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case RouteingAreaIdentity:
 		if len(i.Payload) < 6 {

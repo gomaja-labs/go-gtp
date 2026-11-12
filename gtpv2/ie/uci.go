@@ -16,7 +16,7 @@ func NewUserCSGInformation(mcc, mnc string, csgID uint32, mode, lcsg, cmi uint8)
 	v := NewUserCSGInformationFields(mcc, mnc, csgID, mode, lcsg, cmi)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(UserCSGInformation, err)
 	}
 
 	return New(UserCSGInformation, 0x00, b)
@@ -24,6 +24,9 @@ func NewUserCSGInformation(mcc, mnc string, csgID uint32, mode, lcsg, cmi uint8)
 
 // UserCSGInformation returns UserCSGInformation in UserCSGInformationFields type if the type of IE matches.
 func (i *IE) UserCSGInformation() (*UserCSGInformationFields, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case UserCSGInformation:
 		return ParseUserCSGInformationFields(i.Payload)
@@ -125,6 +128,9 @@ func (f *UserCSGInformationFields) MarshalLen() int {
 
 // AccessMode returns AccessMode in uint8 if the type of IE matches.
 func (i *IE) AccessMode() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case UserCSGInformation:
 		if len(i.Payload) < 8 {
