@@ -10,12 +10,17 @@ import (
 	"net"
 	"time"
 
+	"github.com/gomaja-labs/go-gtp/examples/internal/gtpc"
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
 )
 
 func handleCreateSessionRequest(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg message.Message) error {
+	if err := gtpc.CheckRequest(s11Conn, mmeAddr, msg); err != nil {
+		return err
+	}
+
 	sgw.loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), mmeAddr)
 
 	s11Session := gtpv2.NewSession(mmeAddr, &gtpv2.Subscriber{Location: &gtpv2.Location{}})
@@ -191,6 +196,10 @@ func handleCreateSessionRequest(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg messa
 		s11Conn.RemoveSession(s11Session)
 		return &gtpv2.UnexpectedTypeError{Msg: incomingMsg}
 	}
+	if err := gtpc.BearerContexts(csRspFromPGW.BearerContextsCreated); err != nil {
+		return err
+	}
+
 	// if everything in CreateSessionResponse seems OK, relay it to MME.
 	s1uIP, _, err := net.SplitHostPort(*s1u + gtpv2.GTPCPort)
 	if err != nil {
@@ -237,9 +246,13 @@ func handleCreateSessionRequest(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg messa
 }
 
 func handleModifyBearerRequest(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg message.Message) error {
+	if err := gtpc.CheckRequest(s11Conn, mmeAddr, msg); err != nil {
+		return err
+	}
+
 	sgw.loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), mmeAddr)
 
-	s11Session, err := s11Conn.GetSessionByTEID(msg.TEID(), mmeAddr)
+	s11Session, err := s11Conn.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -254,8 +267,14 @@ func handleModifyBearerRequest(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg messag
 	// in general, no need to check if it can be type-asserted, as long as the MessageType is
 	// specified correctly in AddHandler().
 	mbReqFromMME := msg.(*message.ModifyBearerRequest)
+	if err := gtpc.BearerContexts(mbReqFromMME.BearerContextsToBeModified); err != nil {
+		return err
+	}
 	if brCtxIE := mbReqFromMME.BearerContextsToBeModified; brCtxIE != nil {
 		for _, childIE := range brCtxIE[0].ChildIEs {
+			if childIE == nil {
+				continue
+			}
 			switch childIE.Type {
 			case ie.Indication:
 				// do nothing in this example.
@@ -326,7 +345,7 @@ func handleDeleteSessionRequest(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg messa
 	// specified correctly in AddHandler().
 	dsReqFromMME := msg.(*message.DeleteSessionRequest)
 
-	s11Session, err := s11Conn.GetSessionByTEID(msg.TEID(), mmeAddr)
+	s11Session, err := s11Conn.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -395,7 +414,7 @@ func handleDeleteSessionRequest(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg messa
 func handleDeleteBearerResponse(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg message.Message) error {
 	sgw.loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), mmeAddr)
 
-	s11Session, err := s11Conn.GetSessionByTEID(msg.TEID(), mmeAddr)
+	s11Session, err := s11Conn.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -405,7 +424,7 @@ func handleDeleteBearerResponse(s11Conn *gtpv2.Conn, mmeAddr net.Addr, msg messa
 		return err
 	}
 
-	if err := gtpv2.PassMessageTo(s5Session, msg, 5*time.Second); err != nil {
+	if err := gtpv2.PassMessageTo(s5Session, msg); err != nil {
 		return err
 	}
 

@@ -5,7 +5,10 @@
 package gtp
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -98,5 +101,23 @@ func TestMessage(t *testing.T) {
 				t.Fatalf("got %v want %v", got, want)
 			}
 		})
+	}
+}
+
+func TestPrimeDiscriminator(t *testing.T) {
+	if _, err := Parse([]byte{0x20, 255, 0, 0, 0, 0, 0, 1}); err == nil {
+		t.Fatal("root Parse accepted PT=0 as GTPv1-U")
+	}
+}
+func TestDocumentationPackagePaths(t *testing.T) {
+	b, err := os.ReadFile("doc.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range regexp.MustCompile(`pkg.go.dev/github.com/gomaja-labs/go-gtp/([^\s]+)`).FindAllSubmatch(b, -1) {
+		p := string(m[1])
+		if _, err := os.Stat(filepath.Join(p, "doc.go")); err != nil {
+			t.Errorf("documented package %s is absent", p)
+		}
 	}
 }

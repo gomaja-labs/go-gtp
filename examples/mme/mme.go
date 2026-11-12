@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/gomaja-labs/go-gtp/examples/internal/gtpc"
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
@@ -17,7 +18,7 @@ func handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Me
 	loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), sgwAddr)
 
 	// find the session associated with TEID
-	session, err := c.GetSessionByTEID(msg.TEID(), sgwAddr)
+	session, err := c.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		c.RemoveSession(session)
 		return err
@@ -74,8 +75,14 @@ func handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Me
 		return err
 	}
 
+	if err := gtpc.BearerContexts(csRspFromSGW.BearerContextsCreated); err != nil {
+		return err
+	}
 	if brCtxIE := csRspFromSGW.BearerContextsCreated; brCtxIE != nil {
 		for _, childIE := range brCtxIE[0].ChildIEs {
+			if childIE == nil {
+				continue
+			}
 			switch childIE.Type {
 			case ie.EPSBearerID:
 				bearer.EBI, err = childIE.EPSBearerID()
@@ -94,6 +101,16 @@ func handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Me
 				if err != nil {
 					return err
 				}
+				if it == gtpv2.IFTypeS1USGWGTPU {
+					// TS 29.274 Table 7.2.2-2 carries the S1-U SGW F-TEID.
+					ip, err := gtpc.FTEIDAddress(childIE)
+					if err != nil {
+						return err
+					}
+					bearer.SetRemoteAddress(&net.UDPAddr{IP: net.ParseIP(ip), Port: 2152})
+					bearer.SetOutgoingTEID(teid)
+				}
+
 				session.AddTEID(it, teid)
 			}
 		}
@@ -101,6 +118,9 @@ func handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Me
 		return &gtpv2.RequiredIEMissingError{Type: ie.BearerContext}
 	}
 
+	if bearer.RemoteAddress() == nil {
+		return &gtpv2.RequiredIEMissingError{Type: ie.FullyQualifiedTEID}
+	}
 	if err := session.Activate(); err != nil {
 		c.RemoveSession(session)
 		return err
@@ -117,7 +137,7 @@ func handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Me
 func handleModifyBearerResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Message) error {
 	loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), sgwAddr)
 
-	session, err := c.GetSessionByTEID(msg.TEID(), sgwAddr)
+	session, err := c.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -143,36 +163,10 @@ func handleModifyBearerResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Mes
 		subscriberIP: session.GetDefaultBearer().SubscriberIP,
 		payload:      payload,
 	}
-	if brCtxIE := mbRspFromSGW.BearerContextsModified; brCtxIE != nil {
-		for _, childIE := range brCtxIE[0].ChildIEs {
-			if childIE.Type == ie.FullyQualifiedTEID {
-				if childIE.Instance() != 0 {
-					continue
-				}
-				it, err := childIE.InterfaceType()
-				if err != nil {
-					return err
-				}
-				teid, err := childIE.TEID()
-				if err != nil {
-					return err
-				}
-				session.AddTEID(it, teid)
-
-				ip, err := childIE.IPAddress()
-				if err != nil {
-					return err
-				}
-				sgwUAddr, err := net.ResolveUDPAddr("udp", ip+gtpv2.GTPUPort)
-				if err != nil {
-					return err
-				}
-				mock.raddr = sgwUAddr
-				mock.teidOut = teid
-			}
-		}
-	} else {
-		return &gtpv2.RequiredIEMissingError{Type: ie.BearerContext}
+	mock.raddr = session.GetDefaultBearer().RemoteAddress()
+	mock.teidOut = session.GetDefaultBearer().OutgoingTEID()
+	if mock.raddr == nil {
+		return &gtpv2.RequiredIEMissingError{Type: ie.FullyQualifiedTEID}
 	}
 
 	go mock.run(errCh)
@@ -184,7 +178,7 @@ func handleModifyBearerResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Mes
 func handleDeleteSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Message) error {
 	loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), sgwAddr)
 
-	session, err := c.GetSessionByTEID(msg.TEID(), sgwAddr)
+	session, err := c.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}

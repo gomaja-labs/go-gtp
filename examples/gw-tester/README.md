@@ -34,6 +34,8 @@ Currently, we use the IP address that is defined in `enb.yml`, and the one passe
 * TEID allocation  
 It can be both static and dynamic. Random TEID will be allocated by enb if `i_tei` in `enb.yml` is set to `0`. For outgoing TEID, the one that S-GW allocates will be used.
 
+The Detach RPC returns gRPC Unimplemented. Detach callers must use a Delete Session exchange and local cleanup; a successful RPC does not currently perform that exchange.
+
 ### U-Plane Data Injection
 
 eNB forwards incoming traffic from UE or generates traffic by itself depending on the `type` in `enb.yml`.

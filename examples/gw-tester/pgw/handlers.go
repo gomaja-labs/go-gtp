@@ -9,12 +9,17 @@ import (
 	"net"
 	"strings"
 
+	"github.com/gomaja-labs/go-gtp/examples/internal/gtpc"
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
 )
 
 func (p *pgw) handleCreateSessionRequest(c *gtpv2.Conn, sgwAddr net.Addr, msg message.Message) error {
+	if err := gtpc.CheckRequest(c, sgwAddr, msg); err != nil {
+		return err
+	}
+
 	log.Printf("Received %s from %s", msg.MessageTypeName(), sgwAddr)
 	if p.mc != nil {
 		p.mc.messagesReceived.WithLabelValues(sgwAddr.String(), msg.MessageTypeName()).Inc()
@@ -97,8 +102,14 @@ func (p *pgw) handleCreateSessionRequest(c *gtpv2.Conn, sgwAddr net.Addr, msg me
 
 	var s5sgwuIP string
 	var oteiU uint32
+	if err := gtpc.BearerContexts(csReqFromSGW.BearerContextsToBeCreated); err != nil {
+		return err
+	}
 	if brCtxIE := csReqFromSGW.BearerContextsToBeCreated; brCtxIE != nil {
 		for _, childIE := range brCtxIE[0].ChildIEs {
+			if childIE == nil {
+				continue
+			}
 			switch childIE.Type {
 			case ie.EPSBearerID:
 				bearer.EBI, err = childIE.EPSBearerID()
@@ -201,7 +212,7 @@ func (p *pgw) handleDeleteSessionRequest(c *gtpv2.Conn, sgwAddr net.Addr, msg me
 	// assert type to refer to the struct field specific to the message.
 	// in general, no need to check if it can be type-asserted, as long as the MessageType is
 	// specified correctly in AddHandler().
-	session, err := c.GetSessionByTEID(msg.TEID(), sgwAddr)
+	session, err := c.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		dsr := message.NewDeleteSessionResponse(
 			0, 0,

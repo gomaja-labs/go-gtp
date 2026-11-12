@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/gomaja-labs/go-gtp/examples/internal/gtpc"
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
@@ -13,7 +14,7 @@ import (
 func handleCreateSessionResponse(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg message.Message) error {
 	sgw.loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), pgwAddr)
 
-	s5Session, err := s5cConn.GetSessionByTEID(msg.TEID(), pgwAddr)
+	s5Session, err := s5cConn.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -73,8 +74,14 @@ func handleCreateSessionResponse(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg mess
 		return &gtpv2.RequiredIEMissingError{Type: ie.FullyQualifiedTEID}
 	}
 
+	if err := gtpc.BearerContexts(csRspFromPGW.BearerContextsCreated); err != nil {
+		return err
+	}
 	if brCtxIE := csRspFromPGW.BearerContextsCreated; brCtxIE != nil {
 		for _, childIE := range brCtxIE[0].ChildIEs {
+			if childIE == nil {
+				continue
+			}
 			switch childIE.Type {
 			case ie.Cause:
 				cause, err := childIE.Cause()
@@ -122,7 +129,7 @@ func handleCreateSessionResponse(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg mess
 		return err
 	}
 
-	if err := gtpv2.PassMessageTo(s11Session, csRspFromPGW, 5*time.Second); err != nil {
+	if err := gtpv2.PassMessageTo(s11Session, csRspFromPGW); err != nil {
 		return err
 	}
 
@@ -132,7 +139,7 @@ func handleCreateSessionResponse(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg mess
 func handleDeleteSessionResponse(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg message.Message) error {
 	sgw.loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), pgwAddr)
 
-	s5Session, err := s5cConn.GetSessionByTEID(msg.TEID(), pgwAddr)
+	s5Session, err := s5cConn.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -142,7 +149,7 @@ func handleDeleteSessionResponse(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg mess
 		return err
 	}
 
-	if err := gtpv2.PassMessageTo(s11Session, msg, 5*time.Second); err != nil {
+	if err := gtpv2.PassMessageTo(s11Session, msg); err != nil {
 		return err
 	}
 
@@ -153,9 +160,13 @@ func handleDeleteSessionResponse(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg mess
 }
 
 func handleDeleteBearerRequest(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg message.Message) error {
+	if err := gtpc.CheckRequest(s5cConn, pgwAddr, msg); err != nil {
+		return err
+	}
+
 	sgw.loggerCh <- fmt.Sprintf("Received %s from %s", msg.MessageTypeName(), pgwAddr)
 
-	s5Session, err := s5cConn.GetSessionByTEID(msg.TEID(), pgwAddr)
+	s5Session, err := s5cConn.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -185,7 +196,7 @@ func handleDeleteBearerRequest(s5cConn *gtpv2.Conn, pgwAddr net.Addr, msg messag
 	if ie := dbReqFromPGW.LinkedEBI; ie != nil {
 		ebi = ie
 	}
-	if e := dbReqFromPGW.EBIs; e != nil {
+	if e := dbReqFromPGW.EBIs; len(e) > 0 {
 		ebiIE := e[0]
 		// shouldn't be both.
 		if ebi != nil {

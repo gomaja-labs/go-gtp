@@ -37,6 +37,10 @@ func Parse(b []byte) (Message, error) {
 		return nil, ErrTooShortToParse
 	}
 
+	// TS 29.281 §5.1; GSM 09.60 §6: PT distinguishes GTP from GTP prime.
+	if b[0]>>5 <= 1 && b[0]&0x10 == 0 {
+		return nil, ErrInvalidVersion
+	}
 	switch b[0] >> 5 {
 	case 0:
 		return v0msg.Parse(b)

@@ -14,8 +14,11 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/gomaja-labs/go-gtp/examples/gw-tester/s1mme"
+	"github.com/gomaja-labs/go-gtp/examples/internal/gtpc"
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
@@ -132,6 +135,7 @@ func (m *mme) run(ctx context.Context) error {
 	m.s11Conn.AddHandlers(map[uint8]gtpv2.HandlerFunc{
 		message.MsgTypeCreateSessionResponse: m.handleCreateSessionResponse,
 		message.MsgTypeModifyBearerResponse:  m.handleModifyBearerResponse,
+		message.MsgTypeDeleteBearerRequest:   gtpc.HandleDeleteBearerRequest,
 		message.MsgTypeDeleteSessionResponse: m.handleDeleteSessionResponse,
 	})
 
@@ -249,8 +253,7 @@ func (m *mme) Attach(ctx context.Context, req *s1mme.AttachRequest) (*s1mme.Atta
 
 // Detach is called by eNB by gRPC.
 func (m *mme) Detach(ctx context.Context, req *s1mme.DetachRequest) (*s1mme.DetachResponse, error) {
-	// TODO: implement
-	return nil, nil
+	return nil, status.Error(codes.Unimplemented, "Detach is not implemented; use the GTP Delete Session exchange")
 }
 
 func (m *mme) CreateSession(sess *Session) (*gtpv2.Session, error) {
@@ -275,15 +278,15 @@ func (m *mme) CreateSession(sess *Session) (*gtpv2.Session, error) {
 		ie.NewIMSI(sess.IMSI),
 		ie.NewMSISDN(sess.MSISDN),
 		ie.NewMobileEquipmentIdentity(sess.IMEISV),
-		ie.NewUserLocationInformationStruct(
+		ie.NewUserLocationInformation(
 			ie.NewCGI(m.enb.mcc, m.enb.mnc, 0x1111, 0x2222),
 			ie.NewSAI(m.enb.mcc, m.enb.mnc, 0x1111, 0x3333),
-			ie.NewRAI(m.enb.mcc, m.enb.mnc, 0x1111, 0x4444),
+			ie.NewRAI(m.enb.mcc, m.enb.mnc, 0x1111, 0x44),
 			ie.NewTAI(m.enb.mcc, m.enb.mnc, 0x5555),
-			ie.NewECGI(m.enb.mcc, m.enb.mnc, 0x66666666),
+			ie.NewECGI(m.enb.mcc, m.enb.mnc, 0x6666666),
 			ie.NewLAI(m.enb.mcc, m.enb.mnc, 0x1111),
-			ie.NewMENBI(m.enb.mcc, m.enb.mnc, 0x111111),
-			ie.NewEMENBI(m.enb.mcc, m.enb.mnc, 0x222222),
+			ie.NewMENBI(m.enb.mcc, m.enb.mnc, 0x11111),
+			nil,
 		),
 		ie.NewRATType(gtpv2.RATTypeEUTRAN),
 		ie.NewIndicationFromOctets(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00),

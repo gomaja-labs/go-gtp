@@ -46,7 +46,9 @@ jobs:
       - name: go test
         env:
           GOARCH: ${{ matrix.goarch }}
-        run: go test ./... ${{ matrix.flags }} -count=1 -timeout 900s
+        # -shuffle=on randomises test order (the seed is printed) so that tests
+        # cannot depend on each other.
+        run: go test ./... ${{ matrix.flags }} -shuffle=on -count=1 -timeout 900s
       - name: benchmarks (one iteration each)
         env:
           GOARCH: ${{ matrix.goarch }}
@@ -131,4 +133,4 @@ jobs:
         if: runner.os == 'macOS'
         run: for a in 2 11 12; do sudo ifconfig lo0 alias "127.0.0.$a"; done
       - name: go test
-        run: go test ./... -count=1 -timeout 900s
+        run: go test ./... -shuffle=on -count=1 -timeout 900s

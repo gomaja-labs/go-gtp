@@ -6,11 +6,11 @@
 //
 // This package is the wrapper for all versions of GTP.  Please see the godocs of each version instead.
 //
-// GTPv0: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/v0
+// GTPv0: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/gtpv0
 //
-// GTPv1: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/v1
+// GTPv1: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/gtpv1
 //
-// GTPv2: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/v2
+// GTPv2: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/gtpv2
 //
 // Please also see README.md for detailed usage of the APIs provided by this package,
 // as well as how to run the examples.

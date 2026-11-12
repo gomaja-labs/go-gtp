@@ -35,6 +35,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gomaja-labs/go-gtp/examples/internal/gtpc"
 	"github.com/gomaja-labs/go-gtp/gtpv1"
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
@@ -95,6 +96,7 @@ func main() {
 	s11Conn.AddHandlers(map[uint8]gtpv2.HandlerFunc{
 		message.MsgTypeCreateSessionResponse: handleCreateSessionResponse,
 		message.MsgTypeModifyBearerResponse:  handleModifyBearerResponse,
+		message.MsgTypeDeleteBearerRequest:   gtpc.HandleDeleteBearerRequest,
 		message.MsgTypeDeleteSessionResponse: handleDeleteSessionResponse,
 	})
 

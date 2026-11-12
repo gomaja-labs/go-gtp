@@ -89,10 +89,10 @@ func handleAttach(raddr net.Addr, c *gtpv2.Conn, sub *gtpv2.Subscriber, br *gtpv
 		ie.NewIMSI(sub.IMSI),
 		ie.NewMSISDN(sub.MSISDN),
 		ie.NewMobileEquipmentIdentity(sub.IMEI),
-		ie.NewUserLocationInformationStruct(
+		ie.NewUserLocationInformation(
 			ie.NewCGI(sub.MCC, sub.MNC, sub.LAC, sub.CI),
 			ie.NewSAI(sub.MCC, sub.MNC, sub.LAC, sub.SAI),
-			ie.NewRAI(sub.MCC, sub.MNC, sub.LAC, sub.RAI),
+			newSubscriberRAI(sub),
 			ie.NewTAI(sub.MCC, sub.MNC, sub.TAI),
 			ie.NewECGI(sub.MCC, sub.MNC, sub.ECI),
 			ie.NewLAI(sub.MCC, sub.MNC, sub.LAC),
@@ -175,4 +175,11 @@ func (m mockUEeNB) run(errCh chan error) {
 			loggerCh <- fmt.Sprintf("Received from %s: %x", raddr, buf[:n])
 		}
 	})
+}
+
+func newSubscriberRAI(sub *gtpv2.Subscriber) *ie.RAI {
+	if sub.RAI > 255 {
+		return &ie.RAI{}
+	}
+	return ie.NewRAI(sub.MCC, sub.MNC, sub.LAC, uint8(sub.RAI))
 }

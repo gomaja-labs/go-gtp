@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/gomaja-labs/go-gtp/examples/internal/gtpc"
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
@@ -21,7 +22,7 @@ func (m *mme) handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg m
 	}
 
 	// find the session associated with TEID
-	session, err := c.GetSessionByTEID(msg.TEID(), sgwAddr)
+	session, err := c.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		c.RemoveSession(session)
 		return err
@@ -78,8 +79,14 @@ func (m *mme) handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg m
 		return err
 	}
 
+	if err := gtpc.BearerContexts(csRspFromSGW.BearerContextsCreated); err != nil {
+		return err
+	}
 	if brCtxIE := csRspFromSGW.BearerContextsCreated; brCtxIE != nil {
 		for _, childIE := range brCtxIE[0].ChildIEs {
+			if childIE == nil {
+				continue
+			}
 			switch childIE.Type {
 			case ie.EPSBearerID:
 				bearer.EBI, err = childIE.EPSBearerID()
@@ -98,6 +105,17 @@ func (m *mme) handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg m
 				if err != nil {
 					return err
 				}
+				if it == gtpv2.IFTypeS1USGWGTPU {
+					// TS 29.274 Table 7.2.2-2 carries the S1-U SGW F-TEID.
+					ip, err := gtpc.FTEIDAddress(childIE)
+					if err != nil {
+						return err
+					}
+					bearer.SetRemoteAddress(&net.UDPAddr{IP: net.ParseIP(ip), Port: 2152})
+					bearer.SetOutgoingTEID(teid)
+					m.sgw.s1uIP = ip
+				}
+
 				session.AddTEID(it, teid)
 			}
 		}
@@ -105,6 +123,9 @@ func (m *mme) handleCreateSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg m
 		return &gtpv2.RequiredIEMissingError{Type: ie.BearerContext}
 	}
 
+	if bearer.RemoteAddress() == nil {
+		return &gtpv2.RequiredIEMissingError{Type: ie.FullyQualifiedTEID}
+	}
 	if err := session.Activate(); err != nil {
 		c.RemoveSession(session)
 		return err
@@ -124,7 +145,7 @@ func (m *mme) handleModifyBearerResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg me
 		m.mc.messagesReceived.WithLabelValues(sgwAddr.String(), msg.MessageTypeName()).Inc()
 	}
 
-	session, err := c.GetSessionByTEID(msg.TEID(), sgwAddr)
+	session, err := c.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
@@ -146,32 +167,6 @@ func (m *mme) handleModifyBearerResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg me
 		return &gtpv2.RequiredIEMissingError{Type: ie.Cause}
 	}
 
-	if brCtxIE := mbRspFromSGW.BearerContextsModified; brCtxIE != nil {
-		for _, childIE := range brCtxIE[0].ChildIEs {
-			if childIE.Type == ie.FullyQualifiedTEID {
-				if childIE.Instance() != 0 {
-					continue
-				}
-				it, err := childIE.InterfaceType()
-				if err != nil {
-					return err
-				}
-				teid, err := childIE.TEID()
-				if err != nil {
-					return err
-				}
-				session.AddTEID(it, teid)
-
-				m.sgw.s1uIP, err = childIE.IPAddress()
-				if err != nil {
-					return err
-				}
-			}
-		}
-	} else {
-		return &gtpv2.RequiredIEMissingError{Type: ie.BearerContext}
-	}
-
 	log.Printf("Bearer modified with S-GW for Subscriber: %s", session.IMSI)
 	m.modified <- struct{}{}
 	return nil
@@ -183,7 +178,7 @@ func (m *mme) handleDeleteSessionResponse(c *gtpv2.Conn, sgwAddr net.Addr, msg m
 		m.mc.messagesReceived.WithLabelValues(sgwAddr.String(), msg.MessageTypeName()).Inc()
 	}
 
-	session, err := c.GetSessionByTEID(msg.TEID(), sgwAddr)
+	session, err := c.GetSessionByTEID(msg.TEID())
 	if err != nil {
 		return err
 	}
