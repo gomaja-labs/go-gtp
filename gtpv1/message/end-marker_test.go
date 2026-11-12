@@ -7,8 +7,8 @@ package message_test
 import (
 	"testing"
 
+	"github.com/gomaja-labs/go-gtp/gtpv1/internal/testutils"
 	"github.com/gomaja-labs/go-gtp/gtpv1/message"
-	"github.com/gomaja-labs/go-gtp/gtpv1/testutils"
 )
 
 func TestEndMarker(t *testing.T) {

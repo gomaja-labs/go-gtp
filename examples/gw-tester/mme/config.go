@@ -7,7 +7,7 @@ package main
 import (
 	"os"
 
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v3"
 )
 
 // Config is a configurations loaded from yaml.

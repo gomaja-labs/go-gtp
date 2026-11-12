@@ -9,8 +9,8 @@ import (
 
 	"github.com/gomaja-labs/go-gtp/gtpv2"
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
+	"github.com/gomaja-labs/go-gtp/gtpv2/internal/testutils"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
-	"github.com/gomaja-labs/go-gtp/gtpv2/testutils"
 )
 
 func TestResumeAcknowledge(t *testing.T) {

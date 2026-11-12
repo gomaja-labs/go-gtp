@@ -9,8 +9,8 @@ import (
 
 	"github.com/gomaja-labs/go-gtp/gtpv0"
 	"github.com/gomaja-labs/go-gtp/gtpv0/ie"
+	"github.com/gomaja-labs/go-gtp/gtpv0/internal/testutils"
 	"github.com/gomaja-labs/go-gtp/gtpv0/message"
-	"github.com/gomaja-labs/go-gtp/gtpv0/testutils"
 )
 
 func TestCreatePDPContextResponse(t *testing.T) {

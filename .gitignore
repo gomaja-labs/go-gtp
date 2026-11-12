@@ -5,5 +5,3 @@ examples/gw-tester/enb/enb
 examples/gw-tester/pgw/pgw
 examples/gw-tester/sgw/sgw
 examples/gw-tester/mme/mme
-
-**/testdata/

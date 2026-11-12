@@ -5,10 +5,10 @@
 package gtp
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pascaldekloe/goe/verify"
 
 	v0msg "github.com/gomaja-labs/go-gtp/gtpv0/message"
 	v1msg "github.com/gomaja-labs/go-gtp/gtpv1/message"
@@ -71,8 +71,8 @@ func TestMessage(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if got, want := v, c.structured; !verify.Values(t, "", got, want) {
-				t.Fail()
+			if diff := cmp.Diff(c.structured, v, cmp.Exporter(func(reflect.Type) bool { return true })); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 		})
 

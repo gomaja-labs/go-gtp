@@ -211,3 +211,7 @@ I'm planning to add some more metrics like "success rate of HTTP probe", etc.
 | Active bearers    | `<node-name>_active_bearers`          | number of GTP-U tunnels established currently |
 | Messages sent     | `<node-name>_messages_sent_total`     | number of messages sent by messagge type      |
 | Messages received | `<node-name>_messages_received_total` | number of messages received by messagge type  |
+
+### Regenerating S1-MME bindings
+
+From `examples/`, install `github.com/bufbuild/buf/cmd/buf@latest`, `google.golang.org/protobuf/cmd/protoc-gen-go@latest`, and `google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest` with `go install`, put the installation directory on `PATH`, then run `go generate ./gw-tester/s1mme`. The local `buf.gen.yaml` generates the opaque Go API (without legacy descriptor methods) and gRPC bindings from `s1mme.proto`.

@@ -60,17 +60,3 @@ func (i *IE) PriorityLevel() (uint8, error) {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
 }
-
-// PreemptionVulnerability reports whether the preemption vulnerability is set to enabled if the type of IE matches.
-//
-// Deprecated: use HasPVI instead.
-func (i *IE) PreemptionVulnerability() bool {
-	return i.HasPVI()
-}
-
-// PreemptionCapability reports whether the preemption capability is set to enabled if the type of IE matches.
-//
-// Deprecated: use HasPCI instead.
-func (i *IE) PreemptionCapability() bool {
-	return i.HasPCI()
-}

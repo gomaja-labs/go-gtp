@@ -9,8 +9,8 @@ import (
 
 	"github.com/gomaja-labs/go-gtp/gtpv1"
 	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
+	"github.com/gomaja-labs/go-gtp/gtpv1/internal/testutils"
 	"github.com/gomaja-labs/go-gtp/gtpv1/message"
-	"github.com/gomaja-labs/go-gtp/gtpv1/testutils"
 )
 
 func TestDeletePDPContextRequest(t *testing.T) {

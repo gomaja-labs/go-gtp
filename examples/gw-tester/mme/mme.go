@@ -33,6 +33,7 @@ type Session struct {
 }
 
 type mme struct {
+	s1mme.UnimplementedAttacherServer
 	s1mmeListener net.Listener
 	s11Addr       net.Addr
 	s11IP         string
@@ -177,15 +178,15 @@ func (m *mme) reload(cfg *Config) error {
 // Attach is called by eNB by gRPC.
 func (m *mme) Attach(ctx context.Context, req *s1mme.AttachRequest) (*s1mme.AttachResponse, error) {
 	sess := &Session{
-		IMSI:   req.Imsi,
-		MSISDN: req.Msisdn,
-		IMEISV: req.Imeisv,
-		SrcIP:  req.SrcIp,
-		itei:   req.ITei,
+		IMSI:   req.GetImsi(),
+		MSISDN: req.GetMsisdn(),
+		IMEISV: req.GetImeisv(),
+		SrcIP:  req.GetSrcIp(),
+		itei:   req.GetITei(),
 	}
 
 	var err error
-	m.enb.s1uIP, _, err = net.SplitHostPort(req.S1UAddr)
+	m.enb.s1uIP, _, err = net.SplitHostPort(req.GetS1UAddr())
 	if err != nil {
 		return nil, err
 	}
@@ -193,10 +194,10 @@ func (m *mme) Attach(ctx context.Context, req *s1mme.AttachRequest) (*s1mme.Atta
 	errCh := make(chan error, 1)
 	rspCh := make(chan *s1mme.AttachResponse)
 	go func() {
-		m.enb.mcc = req.Location.Mcc
-		m.enb.mnc = req.Location.Mnc
-		m.enb.tai = uint16(req.Location.Tai)
-		m.enb.eci = req.Location.Eci
+		m.enb.mcc = req.GetLocation().GetMcc()
+		m.enb.mnc = req.GetLocation().GetMnc()
+		m.enb.tai = uint16(req.GetLocation().GetTai())
+		m.enb.eci = req.GetLocation().GetEci()
 
 		session, err := m.CreateSession(sess)
 		if err != nil {
@@ -231,11 +232,11 @@ func (m *mme) Attach(ctx context.Context, req *s1mme.AttachRequest) (*s1mme.Atta
 			return
 		}
 
-		rspCh <- &s1mme.AttachResponse{
+		rspCh <- s1mme.AttachResponse_builder{
 			Cause:   s1mme.Cause_SUCCESS,
 			SgwAddr: m.sgw.s1uIP + gtpv2.GTPUPort,
 			OTei:    s1teid,
-		}
+		}.Build()
 	}()
 
 	select {

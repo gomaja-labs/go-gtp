@@ -6,10 +6,11 @@
 package testutils
 
 import (
+	"reflect"
 	"testing"
 
-	"github.com/gomaja-labs/go-gtp/gtpv0/message"
-	"github.com/pascaldekloe/goe/verify"
+	"github.com/gomaja-labs/go-gtp/gtpv2/message"
+	"github.com/google/go-cmp/cmp"
 )
 
 // Serializable is just for testing gtpv2.Messages. Don't use this.
@@ -28,28 +29,23 @@ type TestCase struct {
 // ParseFunc is just for testing gtpv2.Messages. Don't use this.
 type ParseFunc func([]byte) (Serializable, error)
 
-// TestFlow is just for testing gtpv2.Messages. Don't use this.
-var TestFlow = struct {
-	Seq, Label uint16
-	TID        uint64
-}{
-	0x0001, 0x0000, 0x2143658709214355,
-}
+// TestBearerInfo is just for testing gtpv2.Messages. Don't use this.
+var TestBearerInfo = struct{ TEID, Seq uint32 }{0x11223344, 0x00000001}
 
 // Run is just for testing gtpv2.Messages. Don't use this.
-func Run(t *testing.T, cases []TestCase, parse ParseFunc) {
+func Run(t *testing.T, cases []TestCase, decode ParseFunc) {
 	t.Helper()
 
 	for _, c := range cases {
 		t.Run(c.Description, func(t *testing.T) {
 			t.Run("Parse", func(t *testing.T) {
-				v, err := parse(c.Serialized)
+				v, err := decode(c.Serialized)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				if got, want := v, c.Structured; !verify.Values(t, "", got, want) {
-					t.Fail()
+				if diff := cmp.Diff(c.Structured, v, cmp.Exporter(func(reflect.Type) bool { return true })); diff != "" {
+					t.Errorf("mismatch (-want +got):\n%s", diff)
 				}
 			})
 
@@ -59,8 +55,8 @@ func Run(t *testing.T, cases []TestCase, parse ParseFunc) {
 					t.Fatal(err)
 				}
 
-				if got, want := b, c.Serialized; !verify.Values(t, "", got, want) {
-					t.Fail()
+				if diff := cmp.Diff(c.Serialized, b, cmp.Exporter(func(reflect.Type) bool { return true })); diff != "" {
+					t.Errorf("mismatch (-want +got):\n%s", diff)
 				}
 			})
 
@@ -80,21 +76,24 @@ func Run(t *testing.T, cases []TestCase, parse ParseFunc) {
 					return
 				}
 
-				Parsed, err := message.Parse(c.Serialized)
+				decoded, err := message.Parse(c.Serialized)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				if got, want := Parsed.Version(), c.Structured.(message.Message).Version(); got != want {
+				if got, want := decoded.Version(), c.Structured.(message.Message).Version(); got != want {
 					t.Fatalf("got %v want %v", got, want)
 				}
-				if got, want := Parsed.MessageType(), c.Structured.(message.Message).MessageType(); got != want {
+				if got, want := decoded.MessageType(), c.Structured.(message.Message).MessageType(); got != want {
 					t.Fatalf("got %v want %v", got, want)
 				}
-				if got, want := Parsed.MessageTypeName(), c.Structured.(message.Message).MessageTypeName(); got != want {
+				if got, want := decoded.MessageTypeName(), c.Structured.(message.Message).MessageTypeName(); got != want {
 					t.Fatalf("got %v want %v", got, want)
 				}
-				if got, want := Parsed.TID(), c.Structured.(message.Message).TID(); got != want {
+				if got, want := decoded.TEID(), c.Structured.(message.Message).TEID(); got != want {
+					t.Fatalf("got %v want %v", got, want)
+				}
+				if got, want := decoded.Sequence(), c.Structured.(message.Message).Sequence(); got != want {
 					t.Fatalf("got %v want %v", got, want)
 				}
 			})

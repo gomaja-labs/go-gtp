@@ -18,10 +18,6 @@ type Message interface {
 	Version() int
 	MessageType() uint8
 	MessageTypeName() string
-
-	// deprecated
-	SerializeTo([]byte) error
-	DecodeFromBytes(b []byte) error
 }
 
 // Marshal returns the byte sequence generated from a Message instance.

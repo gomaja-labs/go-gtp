@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
+	"github.com/gomaja-labs/go-gtp/gtpv1/internal/testutils"
 	"github.com/gomaja-labs/go-gtp/gtpv1/message"
-	"github.com/gomaja-labs/go-gtp/gtpv1/testutils"
 )
 
 func TestEchoResponse(t *testing.T) {

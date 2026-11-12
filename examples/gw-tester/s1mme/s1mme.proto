@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package s1mme;
 
+option go_package = "github.com/gomaja-labs/go-gtp/examples/gw-tester/s1mme";
+
 // Attacher defines the service to attach UE.
 service Attacher {
     rpc Attach (AttachRequest) returns (AttachResponse) {}

@@ -57,13 +57,13 @@ type enb struct {
 func newENB(cfg *Config) (*enb, error) {
 	e := &enb{
 		mu: sync.Mutex{},
-		location: &s1mme.Location{
+		location: s1mme.Location_builder{
 			Mcc:     cfg.MCC,
 			Mnc:     cfg.MNC,
 			RatType: s1mme.Location_RATType(cfg.RATType),
 			Tai:     uint32(cfg.TAI),
 			Eci:     cfg.ECI,
-		},
+		}.Build(),
 		candidateSubs: cfg.Subscribers,
 		useKernelGTP:  cfg.UseKernelGTP,
 		addedAddrs:    make(map[netlink.Link]*netlink.Addr),
@@ -178,13 +178,13 @@ func (e *enb) run(ctx context.Context) error {
 }
 
 func (e *enb) reload(cfg *Config) error {
-	e.location = &s1mme.Location{
+	e.location = s1mme.Location_builder{
 		Mcc:     cfg.MCC,
 		Mnc:     cfg.MNC,
 		RatType: s1mme.Location_RATType(cfg.RATType),
 		Tai:     uint32(cfg.TAI),
 		Eci:     cfg.ECI,
-	}
+	}.Build()
 
 	var errors []error
 	sessionsByIMSI := make(map[string]*Subscriber, len(e.sessions))
@@ -260,7 +260,7 @@ func (e *enb) attach(ctx context.Context, sub *Subscriber) error {
 		sub.ITEI = e.newTEID()
 	}
 
-	req := &s1mme.AttachRequest{
+	req := s1mme.AttachRequest_builder{
 		Imsi:     sub.IMSI,
 		Msisdn:   sub.MSISDN,
 		Imeisv:   sub.IMEISV,
@@ -268,7 +268,7 @@ func (e *enb) attach(ctx context.Context, sub *Subscriber) error {
 		SrcIp:    sub.SrcIP,
 		ITei:     sub.ITEI,
 		Location: e.location,
-	}
+	}.Build()
 
 	rsp, err := e.s1mmeClient.Attach(ctx, req)
 	if err != nil {
@@ -279,18 +279,18 @@ func (e *enb) attach(ctx context.Context, sub *Subscriber) error {
 		e.mc.messagesReceived.WithLabelValues(e.mmeAddr.String(), "Attach Response").Inc()
 	}
 
-	switch rsp.Cause {
+	switch rsp.GetCause() {
 	case s1mme.Cause_SUCCESS:
-		sgwIP, _, err := net.SplitHostPort(rsp.SgwAddr)
+		sgwIP, _, err := net.SplitHostPort(rsp.GetSgwAddr())
 		if err != nil {
 			return err
 		}
 
 		if e.useKernelGTP {
 			if err := e.uConn.AddTunnelOverride(
-				net.ParseIP(sgwIP), net.ParseIP(req.SrcIp), rsp.OTei, req.ITei,
+				net.ParseIP(sgwIP), net.ParseIP(req.GetSrcIp()), rsp.GetOTei(), req.GetITei(),
 			); err != nil {
-				log.Println(net.ParseIP(sgwIP), net.ParseIP(req.SrcIp), rsp.OTei, req.ITei)
+				log.Println(net.ParseIP(sgwIP), net.ParseIP(req.GetSrcIp()), rsp.GetOTei(), req.GetITei())
 				e.errCh <- fmt.Errorf("failed to create tunnel for %s: %w", sub.IMSI, err)
 				return nil
 			}
@@ -300,8 +300,8 @@ func (e *enb) attach(ctx context.Context, sub *Subscriber) error {
 			}
 		}
 
-		sub.sgwAddr = rsp.SgwAddr
-		sub.otei = rsp.OTei
+		sub.sgwAddr = rsp.GetSgwAddr()
+		sub.otei = rsp.GetOTei()
 
 		e.sessions = append(e.sessions, sub)
 		if e.useKernelGTP {
@@ -312,7 +312,7 @@ func (e *enb) attach(ctx context.Context, sub *Subscriber) error {
 			log.Printf("Successfully established tunnel for %s", sub.IMSI)
 		}
 	default:
-		e.errCh <- fmt.Errorf("got unexpected Cause for %s: %s", rsp.Cause, sub.IMSI)
+		e.errCh <- fmt.Errorf("got unexpected Cause for %s: %s", rsp.GetCause(), sub.IMSI)
 		return nil
 	}
 
@@ -424,7 +424,7 @@ func (e *enb) runHTTPProbe(ctx context.Context, sub *Subscriber) error {
 	}
 	dialer := net.Dialer{LocalAddr: laddr}
 	client := http.Client{
-		Transport: &http.Transport{Dial: dialer.Dial},
+		Transport: &http.Transport{DialContext: dialer.DialContext},
 		Timeout:   3 * time.Second,
 	}
 

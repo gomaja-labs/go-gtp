@@ -6,10 +6,11 @@
 package testutils
 
 import (
+	"reflect"
 	"testing"
 
-	"github.com/gomaja-labs/go-gtp/gtpv2/message"
-	"github.com/pascaldekloe/goe/verify"
+	"github.com/gomaja-labs/go-gtp/gtpv1/message"
+	"github.com/google/go-cmp/cmp"
 )
 
 // Serializable is just for testing gtpv2.Messages. Don't use this.
@@ -29,7 +30,10 @@ type TestCase struct {
 type ParseFunc func([]byte) (Serializable, error)
 
 // TestBearerInfo is just for testing gtpv2.Messages. Don't use this.
-var TestBearerInfo = struct{ TEID, Seq uint32 }{0x11223344, 0x00000001}
+var TestBearerInfo = struct {
+	TEID uint32
+	Seq  uint16
+}{0x11223344, 0x00000001}
 
 // Run is just for testing gtpv2.Messages. Don't use this.
 func Run(t *testing.T, cases []TestCase, decode ParseFunc) {
@@ -43,8 +47,8 @@ func Run(t *testing.T, cases []TestCase, decode ParseFunc) {
 					t.Fatal(err)
 				}
 
-				if got, want := v, c.Structured; !verify.Values(t, "", got, want) {
-					t.Fail()
+				if diff := cmp.Diff(c.Structured, v, cmp.Exporter(func(reflect.Type) bool { return true })); diff != "" {
+					t.Errorf("mismatch (-want +got):\n%s", diff)
 				}
 			})
 
@@ -54,8 +58,8 @@ func Run(t *testing.T, cases []TestCase, decode ParseFunc) {
 					t.Fatal(err)
 				}
 
-				if got, want := b, c.Serialized; !verify.Values(t, "", got, want) {
-					t.Fail()
+				if diff := cmp.Diff(c.Serialized, b, cmp.Exporter(func(reflect.Type) bool { return true })); diff != "" {
+					t.Errorf("mismatch (-want +got):\n%s", diff)
 				}
 			})
 
@@ -90,9 +94,6 @@ func Run(t *testing.T, cases []TestCase, decode ParseFunc) {
 					t.Fatalf("got %v want %v", got, want)
 				}
 				if got, want := decoded.TEID(), c.Structured.(message.Message).TEID(); got != want {
-					t.Fatalf("got %v want %v", got, want)
-				}
-				if got, want := decoded.Sequence(), c.Structured.(message.Message).Sequence(); got != want {
 					t.Fatalf("got %v want %v", got, want)
 				}
 			})

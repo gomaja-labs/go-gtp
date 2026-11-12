@@ -7,8 +7,8 @@ package message_test
 import (
 	"testing"
 
+	"github.com/gomaja-labs/go-gtp/gtpv2/internal/testutils"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
-	"github.com/gomaja-labs/go-gtp/gtpv2/testutils"
 )
 
 func TestVersionNotSupportedIndication(t *testing.T) {
