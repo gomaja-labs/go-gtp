@@ -62,6 +62,9 @@ const (
 	IFTypeS2aPGWGTPU
 	IFTypeS11MMEGTPU
 	IFTypeS11SGWGTPU
+	// TS 29.274 §8.22: N26 and N19mb endpoints.
+	IFTypeN26AMFGTPC
+	IFTypeN19mbUPFGTPU
 )
 
 // APN Restriction definitions.

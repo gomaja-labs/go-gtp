@@ -250,7 +250,8 @@ These source files provide typed constructors returning `*ie.IE`; associated
 field structs and accessors are documented in the linked files. Types without
 such helpers can use `ie.New` with raw payloads and the generic scalar helpers
 in [ie/ie.go](ie/ie.go). This table lists helper availability, not complete
-procedure or feature coverage.
+procedure or feature coverage. Constants cover IE types 214–223 and SRVCC
+Cause (56) from TS 29.274 Table 8.1-1.
 
 | IE family (source) | Typed constructors returning `*IE` |
 | --- | --- |
@@ -259,7 +260,7 @@ procedure or feature coverage.
 | [apn](ie/apn.go) | `NewAccessPointName` |
 | [arp](ie/arp.go) | `NewAllocationRetensionPriority` |
 | [bearer-context](ie/bearer-context.go) | `NewBearerContext`, `NewBearerContextWithinCreateBearerRequest`, `NewBearerContextWithinCreateBearerResponse`, `NewBearerContextWithinDeleteBearerRequest`, `NewBearerContextWithinDeleteBearerResponse`, `NewBearerContextWithinModifyBearerCommand`, `NewBearerContextWithinUpdateBearerRequest`, `NewBearerContextWithinUpdateBearerResponse`, `NewBearerContextWithinDeleteBearerCommand`, `NewBearerContextWithinDeleteBearerFailureIndication`, `NewBearerContextWithinCreateIndirectDataForwardingTunnelRequest`, `NewBearerContextWithinCreateIndirectDataForwardingTunnelResponse`, `NewBearerContextWithinForwardRelocationRequest`, `NewBearerContextWithinContextResponse`, `NewBearerContextWithinContextAcknowledge` |
-| [bearer-flags](ie/bearer-flags.go) | `NewBearerFlags` |
+| [bearer-flags](ie/bearer-flags.go) | `NewBearerFlags(uhrrei, asi, vInd, vb, ppc)`; `HasUHRREI` reads UHRREI (TS 29.274 §8.32) |
 | [bearer-qos](ie/bearer-qos.go) | `NewBearerQoS` |
 | [bearer-tft](ie/bearer-tft.go) | `NewBearerTFT`, `NewBearerTFTCreateNewTFT`, `NewBearerTFTAddPacketFilters`, `NewBearerTFTReplacePacketFilters`, `NewBearerTFTDeletePacketFilters`, `NewBearerTFTDeleteExistingTFT`, `NewBearerTFTNoTFTOperation` |
 | [cause](ie/cause.go) | `NewCause` |
@@ -271,7 +272,7 @@ procedure or feature coverage.
 | [detach-type](ie/detach-type.go) | `NewDetachType` |
 | [ebi](ie/ebi.go) | `NewEPSBearerID` |
 | [epc-timer](ie/epc-timer.go) | `NewEPCTimer`, `NewEPCTimerRaw` |
-| [f-teid](ie/f-teid.go) | `NewFullyQualifiedTEID`, `NewFullyQualifiedTEIDNetIP` |
+| [f-teid](ie/f-teid.go) | `NewFullyQualifiedTEID`, `NewFullyQualifiedTEIDNetIP`; `gtpv2.IFTypeN26AMFGTPC` (40) and `gtpv2.IFTypeN19mbUPFGTPU` (41) identify N26 and N19mb endpoints (TS 29.274 §8.22) |
 | [flow-qos](ie/flow-qos.go) | `NewFlowQoS` |
 | [fq-csid](ie/fq-csid.go) | `NewFullyQualifiedCSID` |
 | [fqdn](ie/fqdn.go) | `NewFullyQualifiedDomainName` |
@@ -280,14 +281,14 @@ procedure or feature coverage.
 | [hop-counter](ie/hop-counter.go) | `NewHopCounter` |
 | [ie_grouped](ie/ie_grouped.go) | `NewGroupedIE` |
 | [imsi](ie/imsi.go) | `NewIMSI` |
-| [indication](ie/indication.go) | `NewIndication`, `NewIndicationFromBitSequence`, `NewIndicationFromOctets` |
+| [indication](ie/indication.go) | `NewIndication(flags ...IndicationFlag)`, `NewIndicationFromBitSequence`, `NewIndicationFromOctets`; named flags use the shortest encoding, at least two octets. `Has<X>` follows `Indication<X>`, e.g. `HasPMTSMI`, `HasRetLoc`, `HasPPOFF`, `Has5GSIWKI`; `HasPPON` reads PPON / PPEI (TS 29.274 §8.12) |
 | [integer-number](ie/integer-number.go) | `NewIntegerNumber` |
 | [ip-addr](ie/ip-addr.go) | `NewIPAddress`, `NewIPAddressNetIP` |
 | [ldn](ie/ldn.go) | `NewLocalDistinguishedName` |
 | [mbms-flags](ie/mbms-flags.go) | `NewMBMSFlags` |
 | [mei](ie/mei.go) | `NewMobileEquipmentIdentity` |
 | [msisdn](ie/msisdn.go) | `NewMSISDN` |
-| [node-features](ie/node-features.go) | `NewNodeFeatures` |
+| [node-features](ie/node-features.go) | `NewNodeFeatures`; `HasPSSET` reads PGW-C/SMF Set support (TS 29.274 §8.83) |
 | [node-type](ie/node-type.go) | `NewNodeType` |
 | [p-tmsi-signature](ie/p-tmsi-signature.go) | `NewPTMSISignature` |
 | [p-tmsi](ie/p-tmsi.go) | `NewPacketTMSI` |
@@ -295,6 +296,7 @@ procedure or feature coverage.
 | [paging-and-service-information](ie/paging-and-service-information.go) | `NewPagingAndServiceInformation` |
 | [pco](ie/pco.go) | `NewProtocolConfigurationOptions`, `NewAdditionalProtocolConfigurationOptions`, `NewExtendedProtocolConfigurationOptions`, `NewLargeAdditionalProtocolConfigurationOptions` |
 | [pdn-type](ie/pdn-type.go) | `NewPDNType` |
+| [pgw-change-info](ie/pgw-change-info.go) | `NewPGWChangeInfo(ies ...*IE)` constructs a grouped IE (TS 29.274 §8.145) |
 | [plmn-id](ie/plmn-id.go) | `NewPLMNID` |
 | [port-number](ie/port-number.go) | `NewPortNumber` |
 | [private-extension](ie/private-extension.go) | `NewPrivateExtension` |
@@ -313,6 +315,7 @@ procedure or feature coverage.
 | [throttling](ie/throttling.go) | `NewThrottling` |
 | [tmsi](ie/tmsi.go) | `NewTMSI` |
 | [trace-reference](ie/trace-reference.go) | `NewTraceReference` |
+| [type-extension](ie/type-extension.go) | `NewWithTypeExtension(ext uint16, instance uint8, content []byte)`; `TypeExtension() (uint16, error)` reads the extended type, range 256–65535 (TS 29.274 §8.2.1A) |
 | [uci](ie/uci.go) | `NewUserCSGInformation` |
 | [ue-timezone](ie/ue-timezone.go) | `NewUETimeZone` |
 | [uli-timestamp](ie/uli-timestamp.go) | `NewULITimestamp` |

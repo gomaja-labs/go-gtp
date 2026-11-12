@@ -137,7 +137,7 @@ func TestScalarBoundaries(t *testing.T) {
 			t.Fatalf("timer %v: %v %v", d, v, err)
 		}
 	}
-	for _, i := range []*IE{NewBearerFlags(2, 0, 0, 0), NewAllocationRetensionPriority(2, 0, 0), NewCause(69, 2, 0, 0, nil), NewMBMSFlags(0, 2), NewUserCSGInformation("123", "45", 1, 0, 0, 2), NewPagingAndServiceInformation(16, 0, 0), NewUETimeZone(time.Second, 0), NewRATType(23)} {
+	for _, i := range []*IE{NewBearerFlags(0, 2, 0, 0, 0), NewAllocationRetensionPriority(2, 0, 0), NewCause(69, 2, 0, 0, nil), NewMBMSFlags(0, 2), NewUserCSGInformation("123", "45", 1, 0, 0, 2), NewPagingAndServiceInformation(16, 0, 0), NewUETimeZone(time.Second, 0), NewRATType(23)} {
 		if i.Err() == nil {
 			t.Errorf("invalid type %d input accepted", i.Type)
 		}

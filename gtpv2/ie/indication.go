@@ -8,117 +8,110 @@ import (
 	"strconv"
 )
 
-// TODO: add setters
-// TODO: consider using struct?
+// IndicationFlag is a bit position counted from octet 5 bit 8.
+type IndicationFlag uint8
 
-// NewIndication creates a new Indication IE.
-// Note that each parameters should be 0 if false and 1 if true. Otherwise,
-// the value won't be set as expected in the bitwise operations.
-func NewIndication(
-	daf, dtf, hi, dfi, oi, isrsi, israi, sgwci,
-	sqci, uimsi, cfsi, crsi, ps, pt, si, msv,
-	retLoc, pbic, srni, s6af, s4af, mbmdt, israu, ccrsi,
-	cprai, arrl, ppoff, ppon, ppsi, csfbi, clii, cpsr,
-	nsi, uasi, dtci, bdwi, psci, pcri, aosi, aopi,
-	roaai, epcosi, cpopci, pmtmsi, s11tf, pnsi, unaccsi, wpmsi,
-	fgsnn26, reprefi, fgsiwk, eevrsi, ltemui, ltempi, enbcrsi, tspcmi,
-	csrmfi, mtedtn, mtedta, n5gnmi, fgcnrs, fgcnri, fsrhoi, ethpdn,
-	nspusi, pgwrnsi, rppcsi, pgwchi, sissme, nsenbi, idfupf, emci uint8,
-	extensionOctets ...uint8,
-) *IE {
-	for _, bit := range []uint8{daf, dtf, hi, dfi, oi, isrsi, israi, sgwci, sqci, uimsi, cfsi, crsi, ps, pt, si, msv, retLoc, pbic, srni, s6af, s4af, mbmdt, israu, ccrsi, cprai, arrl, ppoff, ppon, ppsi, csfbi, clii, cpsr, nsi, uasi, dtci, bdwi, psci, pcri, aosi, aopi, roaai, epcosi, cpopci, pmtmsi, s11tf, pnsi, unaccsi, wpmsi, fgsnn26, reprefi, fgsiwk, eevrsi, ltemui, ltempi, enbcrsi, tspcmi, csrmfi, mtedtn, mtedta, n5gnmi, fgcnrs, fgcnri, fsrhoi, ethpdn, nspusi, pgwrnsi, rppcsi, pgwchi, sissme, nsenbi, idfupf, emci} {
-		if bit > 1 {
+// TS 29.274 §8.12, Figure 8.12-1 and clause text: octets 5 through 14.
+const (
+	IndicationDAF IndicationFlag = iota
+	IndicationDTF
+	IndicationHI
+	IndicationDFI
+	IndicationOI
+	IndicationISRSI
+	IndicationISRAI
+	IndicationSGWCI
+	IndicationSQCI
+	IndicationUIMSI
+	IndicationCFSI
+	IndicationCRSI
+	IndicationPS
+	IndicationPT
+	IndicationSI
+	IndicationMSV
+	IndicationRetLoc
+	IndicationPBIC
+	IndicationSRNI
+	IndicationS6AF
+	IndicationS4AF
+	IndicationMBMDT
+	IndicationISRAU
+	IndicationCCRSI
+	IndicationCPRAI
+	IndicationARRL
+	IndicationPPOFF
+	IndicationPPON
+	IndicationPPSI
+	IndicationCSFBI
+	IndicationCLII
+	IndicationCPSR
+	IndicationNSI
+	IndicationUASI
+	IndicationDTCI
+	IndicationBDWI
+	IndicationPSCI
+	IndicationPCRI
+	IndicationAOSI
+	IndicationAOPI
+	IndicationROAAI
+	IndicationEPCOSI
+	IndicationCPOPCI
+	IndicationPMTSMI
+	IndicationS11TF
+	IndicationPNSI
+	IndicationUNACCSI
+	IndicationWPMSI
+	Indication5GSNN26
+	IndicationREPREFI
+	Indication5GSIWKI
+	IndicationEEVRSI
+	IndicationLTEMUI
+	IndicationLTEMPI
+	IndicationENBCRSI
+	IndicationTSPCMI
+	IndicationCSRMFI
+	IndicationMTEDTN
+	IndicationMTEDTA
+	IndicationN5GNMI
+	Indication5GCNRS
+	Indication5GCNRI
+	Indication5SRHOI
+	IndicationETHPDN
+	IndicationNSPUSI
+	IndicationPGWRNSI
+	IndicationRPPCSI
+	IndicationPGWCHI
+	IndicationSISSME
+	IndicationNSENBI
+	IndicationIDFUPF
+	IndicationEMCI
+	indicationOctet14Spare // TS 29.274 §8.12: octet 14 bit 8.
+	IndicationUHRRSI
+	IndicationDISREI
+	IndicationPPRI
+	IndicationLAPCOSI
+	IndicationLTEMSAI
+	IndicationSRTPI
+	IndicationUPIPSI
+)
+
+// NewIndication creates the shortest Indication containing all requested flags.
+func NewIndication(flags ...IndicationFlag) *IE {
+	// TS 29.274 Table 8.1-1: at least two fixed octets.
+	size := 2
+	for _, flag := range flags {
+		if flag > IndicationUPIPSI || flag == indicationOctet14Spare {
 			return newErrorIE(Indication, ErrMalformed)
 		}
+		if n := int(flag)/8 + 1; n > size {
+			size = n
+		}
 	}
-
-	i := New(Indication, 0x00, make([]byte, 9))
-	i.Payload[0] |= sgwci
-	i.Payload[0] |= (israi << 1)
-	i.Payload[0] |= (isrsi << 2)
-	i.Payload[0] |= (oi << 3)
-	i.Payload[0] |= (dfi << 4)
-	i.Payload[0] |= (hi << 5)
-	i.Payload[0] |= (dtf << 6)
-	i.Payload[0] |= (daf << 7)
-
-	i.Payload[1] |= msv
-	i.Payload[1] |= (si << 1)
-	i.Payload[1] |= (pt << 2)
-	i.Payload[1] |= (ps << 3)
-	i.Payload[1] |= (crsi << 4)
-	i.Payload[1] |= (cfsi << 5)
-	i.Payload[1] |= (uimsi << 6)
-	i.Payload[1] |= (sqci << 7)
-
-	i.Payload[2] |= ccrsi
-	i.Payload[2] |= (israu << 1)
-	i.Payload[2] |= (mbmdt << 2)
-	i.Payload[2] |= (s4af << 3)
-	i.Payload[2] |= (s6af << 4)
-	i.Payload[2] |= (srni << 5)
-	i.Payload[2] |= (pbic << 6)
-	i.Payload[2] |= (retLoc << 7)
-
-	i.Payload[3] |= cpsr
-	i.Payload[3] |= (clii << 1)
-	i.Payload[3] |= (csfbi << 2)
-	i.Payload[3] |= (ppsi << 3)
-	i.Payload[3] |= (ppon << 4)
-	i.Payload[3] |= (ppoff << 5)
-	i.Payload[3] |= (arrl << 6)
-	i.Payload[3] |= (cprai << 7)
-
-	i.Payload[4] |= aopi
-	i.Payload[4] |= (aosi << 1)
-	i.Payload[4] |= (pcri << 2)
-	i.Payload[4] |= (psci << 3)
-	i.Payload[4] |= (bdwi << 4)
-	i.Payload[4] |= (dtci << 5)
-	i.Payload[4] |= (uasi << 6)
-	i.Payload[4] |= (nsi << 7)
-
-	i.Payload[5] |= wpmsi
-	i.Payload[5] |= (unaccsi << 1)
-	i.Payload[5] |= (pnsi << 2)
-	i.Payload[5] |= (s11tf << 3)
-	i.Payload[5] |= (pmtmsi << 4)
-	i.Payload[5] |= (cpopci << 5)
-	i.Payload[5] |= (epcosi << 6)
-	i.Payload[5] |= (roaai << 7)
-
-	i.Payload[6] |= tspcmi
-	i.Payload[6] |= (enbcrsi << 1)
-	i.Payload[6] |= (ltempi << 2)
-	i.Payload[6] |= (ltemui << 3)
-	i.Payload[6] |= (eevrsi << 4)
-	i.Payload[6] |= (fgsiwk << 5)
-	i.Payload[6] |= (reprefi << 6)
-	i.Payload[6] |= (fgsnn26 << 7)
-
-	i.Payload[7] |= ethpdn
-	i.Payload[7] |= (fsrhoi << 1)
-	i.Payload[7] |= (fgcnri << 2)
-	i.Payload[7] |= (fgcnrs << 3)
-	i.Payload[7] |= (n5gnmi << 4)
-	i.Payload[7] |= (mtedta << 5)
-	i.Payload[7] |= (mtedtn << 6)
-	i.Payload[7] |= (csrmfi << 7)
-
-	i.Payload[8] |= emci
-	i.Payload[8] |= (idfupf << 1)
-	i.Payload[8] |= (nsenbi << 2)
-	i.Payload[8] |= (sissme << 3)
-	i.Payload[8] |= (pgwchi << 4)
-	i.Payload[8] |= (rppcsi << 5)
-	i.Payload[8] |= (pgwrnsi << 6)
-	i.Payload[8] |= (nspusi << 7)
-	i.Payload = append(i.Payload, extensionOctets...)
-	if len(i.Payload) >= 10 {
-		i.Payload[9] &= 0x7f
-	} // TS 29.274 §8.12: spare bit.
-	i.SetLength()
-	return i
+	payload := make([]byte, size)
+	for _, flag := range flags {
+		payload[int(flag)/8] |= 0x80 >> (flag % 8)
+	}
+	return New(Indication, 0, payload)
 }
 
 // NewIndicationFromBitSequence creates a new Indication IE from string-formatted
@@ -182,1042 +175,244 @@ func (i *IE) Indication() ([]byte, error) {
 	return i.Payload, nil
 }
 
-// HasSGWCI reports whether an IE has SGWCI bit.
-func (i *IE) HasSGWCI() bool {
-	if i == nil {
-		return false
-	}
+func (i *IE) hasIndication(flag IndicationFlag) bool {
 	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has1stBit(v[0])
+	return err == nil && int(flag)/8 < len(v) && v[int(flag)/8]&(0x80>>(flag%8)) != 0
 }
 
-// HasISRAI reports whether an IE has ISRAI bit.
-func (i *IE) HasISRAI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has2ndBit(v[0])
-}
+// HasDAF reports whether the DAF flag is set.
+func (i *IE) HasDAF() bool { return i.hasIndication(IndicationDAF) }
 
-// HasISRSI reports whether an IE has ISRSI bit.
-func (i *IE) HasISRSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has3rdBit(v[0])
-}
+// HasDTF reports whether the DTF flag is set.
+func (i *IE) HasDTF() bool { return i.hasIndication(IndicationDTF) }
 
-// HasOI reports whether an IE has OI bit.
-func (i *IE) HasOI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has4thBit(v[0])
-}
+// HasHI reports whether the HI flag is set.
+func (i *IE) HasHI() bool { return i.hasIndication(IndicationHI) }
 
-// HasDFI reports whether an IE has DFI bit.
-func (i *IE) HasDFI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has5thBit(v[0])
-}
+// HasDFI reports whether the DFI flag is set.
+func (i *IE) HasDFI() bool { return i.hasIndication(IndicationDFI) }
 
-// HasHI reports whether an IE has HI bit.
-func (i *IE) HasHI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has6thBit(v[0])
-}
+// HasOI reports whether the OI flag is set.
+func (i *IE) HasOI() bool { return i.hasIndication(IndicationOI) }
 
-// HasDTF reports whether an IE has DTF bit.
-func (i *IE) HasDTF() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has7thBit(v[0])
-}
+// HasISRSI reports whether the ISRSI flag is set.
+func (i *IE) HasISRSI() bool { return i.hasIndication(IndicationISRSI) }
 
-// HasDAF reports whether an IE has DAF bit.
-func (i *IE) HasDAF() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 1 {
-		return false
-	}
-
-	return has8thBit(v[0])
-}
+// HasISRAI reports whether the ISRAI flag is set.
+func (i *IE) HasISRAI() bool { return i.hasIndication(IndicationISRAI) }
 
-// HasMSV reports whether an IE has MSV bit.
-func (i *IE) HasMSV() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has1stBit(v[1])
-}
+// HasSGWCI reports whether the SGWCI flag is set.
+func (i *IE) HasSGWCI() bool { return i.hasIndication(IndicationSGWCI) }
 
-// HasSI reports whether an IE has SI bit.
-func (i *IE) HasSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has2ndBit(v[1])
-}
+// HasSQCI reports whether the SQCI flag is set.
+func (i *IE) HasSQCI() bool { return i.hasIndication(IndicationSQCI) }
 
-// HasPT reports whether an IE has PT bit.
-func (i *IE) HasPT() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has3rdBit(v[1])
-}
+// HasUIMSI reports whether the UIMSI flag is set.
+func (i *IE) HasUIMSI() bool { return i.hasIndication(IndicationUIMSI) }
 
-// HasPS reports whether an IE has PS bit.
-func (i *IE) HasPS() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has4thBit(v[1])
-}
+// HasCFSI reports whether the CFSI flag is set.
+func (i *IE) HasCFSI() bool { return i.hasIndication(IndicationCFSI) }
 
-// HasCRSI reports whether an IE has CRSI bit.
-func (i *IE) HasCRSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has5thBit(v[1])
-}
+// HasCRSI reports whether the CRSI flag is set.
+func (i *IE) HasCRSI() bool { return i.hasIndication(IndicationCRSI) }
 
-// HasCFSI reports whether an IE has CFSI bit.
-func (i *IE) HasCFSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has6thBit(v[1])
-}
+// HasPS reports whether the PS flag is set.
+func (i *IE) HasPS() bool { return i.hasIndication(IndicationPS) }
 
-// HasUIMSI reports whether an IE has UIMSI bit.
-func (i *IE) HasUIMSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has7thBit(v[1])
-}
+// HasPT reports whether the PT flag is set.
+func (i *IE) HasPT() bool { return i.hasIndication(IndicationPT) }
 
-// HasSQCI reports whether an IE has SQCI bit.
-func (i *IE) HasSQCI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 2 {
-		return false
-	}
-
-	return has8thBit(v[1])
-}
+// HasSI reports whether the SI flag is set.
+func (i *IE) HasSI() bool { return i.hasIndication(IndicationSI) }
 
-// HasCCRSI reports whether an IE has CCRSI bit.
-func (i *IE) HasCCRSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has1stBit(v[2])
-}
+// HasMSV reports whether the MSV flag is set.
+func (i *IE) HasMSV() bool { return i.hasIndication(IndicationMSV) }
 
-// HasISRAU reports whether an IE has ISRAU bit.
-func (i *IE) HasISRAU() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has2ndBit(v[2])
-}
+// HasRetLoc reports whether the RetLoc flag is set.
+func (i *IE) HasRetLoc() bool { return i.hasIndication(IndicationRetLoc) }
 
-// HasMBMDT reports whether an IE has MBMDT bit.
-func (i *IE) HasMBMDT() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has3rdBit(v[2])
-}
+// HasPBIC reports whether the PBIC flag is set.
+func (i *IE) HasPBIC() bool { return i.hasIndication(IndicationPBIC) }
 
-// HasS4AF reports whether an IE has S4AF bit.
-func (i *IE) HasS4AF() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has4thBit(v[2])
-}
+// HasSRNI reports whether the SRNI flag is set.
+func (i *IE) HasSRNI() bool { return i.hasIndication(IndicationSRNI) }
 
-// HasS6AF reports whether an IE has S6AF bit.
-func (i *IE) HasS6AF() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has5thBit(v[2])
-}
+// HasS6AF reports whether the S6AF flag is set.
+func (i *IE) HasS6AF() bool { return i.hasIndication(IndicationS6AF) }
 
-// HasSRNI reports whether an IE has SRNI bit.
-func (i *IE) HasSRNI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has6thBit(v[2])
-}
+// HasS4AF reports whether the S4AF flag is set.
+func (i *IE) HasS4AF() bool { return i.hasIndication(IndicationS4AF) }
 
-// HasPBIC reports whether an IE has PBIC bit.
-func (i *IE) HasPBIC() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has7thBit(v[2])
-}
+// HasMBMDT reports whether the MBMDT flag is set.
+func (i *IE) HasMBMDT() bool { return i.hasIndication(IndicationMBMDT) }
 
-// HasRETLOC reports whether an IE has RETLOC bit.
-func (i *IE) HasRETLOC() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 3 {
-		return false
-	}
-
-	return has8thBit(v[2])
-}
+// HasISRAU reports whether the ISRAU flag is set.
+func (i *IE) HasISRAU() bool { return i.hasIndication(IndicationISRAU) }
 
-// HasCPSR reports whether an IE has CPSR bit.
-func (i *IE) HasCPSR() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has1stBit(v[3])
-}
+// HasCCRSI reports whether the CCRSI flag is set.
+func (i *IE) HasCCRSI() bool { return i.hasIndication(IndicationCCRSI) }
 
-// HasCLII reports whether an IE has CLII bit.
-func (i *IE) HasCLII() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has2ndBit(v[3])
-}
+// HasCPRAI reports whether the CPRAI flag is set.
+func (i *IE) HasCPRAI() bool { return i.hasIndication(IndicationCPRAI) }
 
-// HasCSFBI reports whether an IE has CSFBI bit.
-func (i *IE) HasCSFBI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has3rdBit(v[3])
-}
+// HasARRL reports whether the ARRL flag is set.
+func (i *IE) HasARRL() bool { return i.hasIndication(IndicationARRL) }
 
-// HasPPSI reports whether an IE has PPSI bit.
-func (i *IE) HasPPSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has4thBit(v[3])
-}
+// HasPPON reports whether the PPON / PPEI flag is set.
+func (i *IE) HasPPON() bool { return i.hasIndication(IndicationPPON) }
 
-// HasPPON reports whether an IE has PPON bit.
-func (i *IE) HasPPON() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has5thBit(v[3])
-}
+// HasPPSI reports whether the PPSI flag is set.
+func (i *IE) HasPPSI() bool { return i.hasIndication(IndicationPPSI) }
 
-// HasPPOF reports whether an IE has PPOF bit.
-func (i *IE) HasPPOF() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has6thBit(v[3])
-}
+// HasCSFBI reports whether the CSFBI flag is set.
+func (i *IE) HasCSFBI() bool { return i.hasIndication(IndicationCSFBI) }
 
-// HasARRL reports whether an IE has ARRL bit.
-func (i *IE) HasARRL() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has7thBit(v[3])
-}
+// HasCLII reports whether the CLII flag is set.
+func (i *IE) HasCLII() bool { return i.hasIndication(IndicationCLII) }
 
-// HasCPRAI reports whether an IE has CPRAI bit.
-func (i *IE) HasCPRAI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 4 {
-		return false
-	}
-
-	return has8thBit(v[3])
-}
+// HasCPSR reports whether the CPSR flag is set.
+func (i *IE) HasCPSR() bool { return i.hasIndication(IndicationCPSR) }
 
-// HasAOPI reports whether an IE has AOPI bit.
-func (i *IE) HasAOPI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has1stBit(v[4])
-}
+// HasNSI reports whether the NSI flag is set.
+func (i *IE) HasNSI() bool { return i.hasIndication(IndicationNSI) }
 
-// HasAOSI reports whether an IE has AOSI bit.
-func (i *IE) HasAOSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has2ndBit(v[4])
-}
+// HasUASI reports whether the UASI flag is set.
+func (i *IE) HasUASI() bool { return i.hasIndication(IndicationUASI) }
 
-// HasPCRI reports whether an IE has PCRI bit.
-func (i *IE) HasPCRI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has3rdBit(v[4])
-}
+// HasDTCI reports whether the DTCI flag is set.
+func (i *IE) HasDTCI() bool { return i.hasIndication(IndicationDTCI) }
 
-// HasPSCI reports whether an IE has PSCI bit.
-func (i *IE) HasPSCI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has4thBit(v[4])
-}
+// HasBDWI reports whether the BDWI flag is set.
+func (i *IE) HasBDWI() bool { return i.hasIndication(IndicationBDWI) }
 
-// HasBDWI reports whether an IE has BDWI bit.
-func (i *IE) HasBDWI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has5thBit(v[4])
-}
+// HasPSCI reports whether the PSCI flag is set.
+func (i *IE) HasPSCI() bool { return i.hasIndication(IndicationPSCI) }
 
-// HasDTCI reports whether an IE has DTCI bit.
-func (i *IE) HasDTCI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has6thBit(v[4])
-}
+// HasPCRI reports whether the PCRI flag is set.
+func (i *IE) HasPCRI() bool { return i.hasIndication(IndicationPCRI) }
 
-// HasUASI reports whether an IE has UASI bit.
-func (i *IE) HasUASI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has7thBit(v[4])
-}
+// HasAOSI reports whether the AOSI flag is set.
+func (i *IE) HasAOSI() bool { return i.hasIndication(IndicationAOSI) }
 
-// HasNSI reports whether an IE has NSI bit.
-func (i *IE) HasNSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 5 {
-		return false
-	}
-
-	return has8thBit(v[4])
-}
+// HasAOPI reports whether the AOPI flag is set.
+func (i *IE) HasAOPI() bool { return i.hasIndication(IndicationAOPI) }
 
-// HasWPMSI reports whether an IE has WPMSI bit.
-func (i *IE) HasWPMSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has1stBit(v[5])
-}
+// HasROAAI reports whether the ROAAI flag is set.
+func (i *IE) HasROAAI() bool { return i.hasIndication(IndicationROAAI) }
 
-// HasUNACCSI reports whether an IE has UNACCSI bit.
-func (i *IE) HasUNACCSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has2ndBit(v[5])
-}
+// HasEPCOSI reports whether the EPCOSI flag is set.
+func (i *IE) HasEPCOSI() bool { return i.hasIndication(IndicationEPCOSI) }
 
-// HasPNSI reports whether an IE has PNSI bit.
-func (i *IE) HasPNSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has3rdBit(v[5])
-}
+// HasCPOPCI reports whether the CPOPCI flag is set.
+func (i *IE) HasCPOPCI() bool { return i.hasIndication(IndicationCPOPCI) }
 
-// HasS11TF reports whether an IE has S11TF bit.
-func (i *IE) HasS11TF() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has4thBit(v[5])
-}
+// HasPMTSMI reports whether the PMTSMI flag is set.
+func (i *IE) HasPMTSMI() bool { return i.hasIndication(IndicationPMTSMI) }
 
-// HasPMTMSI reports whether an IE has PMTMSI bit.
-func (i *IE) HasPMTMSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has5thBit(v[5])
-}
+// HasS11TF reports whether the S11TF flag is set.
+func (i *IE) HasS11TF() bool { return i.hasIndication(IndicationS11TF) }
 
-// HasCPOPCI reports whether an IE has CPOPCI bit.
-func (i *IE) HasCPOPCI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has6thBit(v[5])
-}
+// HasPNSI reports whether the PNSI flag is set.
+func (i *IE) HasPNSI() bool { return i.hasIndication(IndicationPNSI) }
 
-// HasEPCOSI reports whether an IE has EPCOSI bit.
-func (i *IE) HasEPCOSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has7thBit(v[5])
-}
+// HasUNACCSI reports whether the UNACCSI flag is set.
+func (i *IE) HasUNACCSI() bool { return i.hasIndication(IndicationUNACCSI) }
 
-// HasROAAI reports whether an IE has ROAAI bit.
-func (i *IE) HasROAAI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 6 {
-		return false
-	}
-
-	return has8thBit(v[5])
-}
+// HasWPMSI reports whether the WPMSI flag is set.
+func (i *IE) HasWPMSI() bool { return i.hasIndication(IndicationWPMSI) }
 
-// HasTSPCMI reports whether an IE has TSPCMI bit.
-func (i *IE) HasTSPCMI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has1stBit(v[6])
-}
+// Has5GSNN26 reports whether the 5GSNN26 flag is set.
+func (i *IE) Has5GSNN26() bool { return i.hasIndication(Indication5GSNN26) }
 
-// HasENBCRSI reports whether an IE has ENBCRSI bit.
-func (i *IE) HasENBCRSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has2ndBit(v[6])
-}
+// HasREPREFI reports whether the REPREFI flag is set.
+func (i *IE) HasREPREFI() bool { return i.hasIndication(IndicationREPREFI) }
 
-// HasLTEMPI reports whether an IE has LTEMPI bit.
-func (i *IE) HasLTEMPI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has3rdBit(v[6])
-}
+// HasEEVRSI reports whether the EEVRSI flag is set.
+func (i *IE) HasEEVRSI() bool { return i.hasIndication(IndicationEEVRSI) }
 
-// HasLTEMUI reports whether an IE has LTEMUI bit.
-func (i *IE) HasLTEMUI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has4thBit(v[6])
-}
+// HasLTEMUI reports whether the LTEMUI flag is set.
+func (i *IE) HasLTEMUI() bool { return i.hasIndication(IndicationLTEMUI) }
 
-// HasEEVRSI reports whether an IE has EEVRSI bit.
-func (i *IE) HasEEVRSI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has5thBit(v[6])
-}
+// HasLTEMPI reports whether the LTEMPI flag is set.
+func (i *IE) HasLTEMPI() bool { return i.hasIndication(IndicationLTEMPI) }
 
-// Has5GSIWK reports whether an IE has 5GSIWK bit.
-func (i *IE) Has5GSIWK() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has6thBit(v[6])
-}
+// HasENBCRSI reports whether the ENBCRSI flag is set.
+func (i *IE) HasENBCRSI() bool { return i.hasIndication(IndicationENBCRSI) }
 
-// HasREPREFI reports whether an IE has REPREFI bit.
-func (i *IE) HasREPREFI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has7thBit(v[6])
-}
+// HasTSPCMI reports whether the TSPCMI flag is set.
+func (i *IE) HasTSPCMI() bool { return i.hasIndication(IndicationTSPCMI) }
 
-// Has5GSNN26 reports whether an IE has 5GSNN26 bit.
-func (i *IE) Has5GSNN26() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 7 {
-		return false
-	}
-
-	return has8thBit(v[6])
-}
+// HasCSRMFI reports whether the CSRMFI flag is set.
+func (i *IE) HasCSRMFI() bool { return i.hasIndication(IndicationCSRMFI) }
 
-// HasETHPDN reports whether an IE has ETHPDN bit.
-func (i *IE) HasETHPDN() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has1stBit(v[7])
-}
+// HasMTEDTN reports whether the MTEDTN flag is set.
+func (i *IE) HasMTEDTN() bool { return i.hasIndication(IndicationMTEDTN) }
 
-// Has5SRHOI reports whether an IE has 5SRHOI bit.
-func (i *IE) Has5SRHOI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has2ndBit(v[7])
-}
+// HasMTEDTA reports whether the MTEDTA flag is set.
+func (i *IE) HasMTEDTA() bool { return i.hasIndication(IndicationMTEDTA) }
 
-// Has5GCNRI reports whether an IE has 5GCNRI bit.
-func (i *IE) Has5GCNRI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has3rdBit(v[7])
-}
+// HasN5GNMI reports whether the N5GNMI flag is set.
+func (i *IE) HasN5GNMI() bool { return i.hasIndication(IndicationN5GNMI) }
 
-// Has5GCNRS reports whether an IE has 5GCNRS bit.
-func (i *IE) Has5GCNRS() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has4thBit(v[7])
-}
+// Has5GCNRS reports whether the 5GCNRS flag is set.
+func (i *IE) Has5GCNRS() bool { return i.hasIndication(Indication5GCNRS) }
 
-// HasN5GNMI reports whether an IE has N5GNMI bit.
-func (i *IE) HasN5GNMI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has5thBit(v[7])
-}
+// Has5GCNRI reports whether the 5GCNRI flag is set.
+func (i *IE) Has5GCNRI() bool { return i.hasIndication(Indication5GCNRI) }
 
-// HasMTEDTA reports whether an IE has MTEDTA bit.
-func (i *IE) HasMTEDTA() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has6thBit(v[7])
-}
+// Has5SRHOI reports whether the 5SRHOI flag is set.
+func (i *IE) Has5SRHOI() bool { return i.hasIndication(Indication5SRHOI) }
 
-// HasMTEDTN reports whether an IE has MTEDTN bit.
-func (i *IE) HasMTEDTN() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has7thBit(v[7])
-}
+// HasETHPDN reports whether the ETHPDN flag is set.
+func (i *IE) HasETHPDN() bool { return i.hasIndication(IndicationETHPDN) }
 
-// HasCSRMFI reports whether an IE has CSRMFI bit.
-func (i *IE) HasCSRMFI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 8 {
-		return false
-	}
-
-	return has8thBit(v[7])
-}
+// HasNSPUSI reports whether the NSPUSI flag is set.
+func (i *IE) HasNSPUSI() bool { return i.hasIndication(IndicationNSPUSI) }
 
-// HasEMCI reports whether an IE has EMCI bit.
-func (i *IE) HasEMCI() bool {
-	if i == nil {
-		return false
-	}
-	v, err := i.Indication()
-	if err != nil {
-		return false
-	}
-	if len(v) < 9 {
-		return false
-	}
-
-	return has1stBit(v[8])
-}
+// HasPGWRNSI reports whether the PGWRNSI flag is set.
+func (i *IE) HasPGWRNSI() bool { return i.hasIndication(IndicationPGWRNSI) }
+
+// HasRPPCSI reports whether the RPPCSI flag is set.
+func (i *IE) HasRPPCSI() bool { return i.hasIndication(IndicationRPPCSI) }
+
+// HasPGWCHI reports whether the PGWCHI flag is set.
+func (i *IE) HasPGWCHI() bool { return i.hasIndication(IndicationPGWCHI) }
+
+// HasSISSME reports whether the SISSME flag is set.
+func (i *IE) HasSISSME() bool { return i.hasIndication(IndicationSISSME) }
+
+// HasNSENBI reports whether the NSENBI flag is set.
+func (i *IE) HasNSENBI() bool { return i.hasIndication(IndicationNSENBI) }
+
+// HasIDFUPF reports whether the IDFUPF flag is set.
+func (i *IE) HasIDFUPF() bool { return i.hasIndication(IndicationIDFUPF) }
+
+// HasEMCI reports whether the EMCI flag is set.
+func (i *IE) HasEMCI() bool { return i.hasIndication(IndicationEMCI) }
+
+// HasUHRRSI reports whether the UHRRSI flag is set.
+func (i *IE) HasUHRRSI() bool { return i.hasIndication(IndicationUHRRSI) }
+
+// HasDISREI reports whether the DISREI flag is set.
+func (i *IE) HasDISREI() bool { return i.hasIndication(IndicationDISREI) }
+
+// HasPPRI reports whether the PPRI flag is set.
+func (i *IE) HasPPRI() bool { return i.hasIndication(IndicationPPRI) }
+
+// HasLAPCOSI reports whether the LAPCOSI flag is set.
+func (i *IE) HasLAPCOSI() bool { return i.hasIndication(IndicationLAPCOSI) }
+
+// HasLTEMSAI reports whether the LTEMSAI flag is set.
+func (i *IE) HasLTEMSAI() bool { return i.hasIndication(IndicationLTEMSAI) }
+
+// HasSRTPI reports whether the SRTPI flag is set.
+func (i *IE) HasSRTPI() bool { return i.hasIndication(IndicationSRTPI) }
+
+// HasUPIPSI reports whether the UPIPSI flag is set.
+func (i *IE) HasUPIPSI() bool { return i.hasIndication(IndicationUPIPSI) }
+
+// HasPPOFF reports whether the PDN Pause Off flag is set.
+func (i *IE) HasPPOFF() bool { return i.hasIndication(IndicationPPOFF) }
+
+// Has5GSIWKI reports whether the 5GS Interworking flag is set.
+func (i *IE) Has5GSIWKI() bool { return i.hasIndication(Indication5GSIWKI) }

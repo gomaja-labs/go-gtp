@@ -32,6 +32,7 @@ const (
 	Cause                                                uint8 = 2
 	Recovery                                             uint8 = 3
 	STNSR                                                uint8 = 51
+	SRVCCCause                                           uint8 = 56 // TS 29.274 Table 8.1-1: explicitly allocated within the Sv range.
 	AccessPointName                                      uint8 = 71
 	AggregateMaximumBitRate                              uint8 = 72
 	EPSBearerID                                          uint8 = 73
@@ -169,8 +170,19 @@ const (
 	BitRate                                              uint8 = 211
 	PC5QoSFlow                                           uint8 = 212
 	SGiPtPTunnelAddress                                  uint8 = 213
-	SpecialIETypeForIETypeExtension                      uint8 = 254
-	PrivateExtension                                     uint8 = 255
+	// TS 29.274 Table 8.1-1: IE types introduced through V20.0.0.
+	PGWChangeInfo                   uint8 = 214
+	PGWFQDN                         uint8 = 215
+	GroupID                         uint8 = 216
+	PSCellID                        uint8 = 217
+	UPSecurityPolicy                uint8 = 218
+	AlternativeIMSI                 uint8 = 219
+	NFInstanceID                    uint8 = 220
+	TimerInSeconds                  uint8 = 221
+	MDTConfigurationNR              uint8 = 222
+	URI                             uint8 = 223
+	SpecialIETypeForIETypeExtension uint8 = 254
+	PrivateExtension                uint8 = 255
 )
 
 // IE is a GTPv2 Information Element.
@@ -575,6 +587,7 @@ var ieTypeNameMap = map[uint8]string{
 	2:   "Cause",
 	3:   "Recovery",
 	51:  "STNSR",
+	56:  "SRVCCCause",
 	71:  "AccessPointName",
 	72:  "AggregateMaximumBitRate",
 	73:  "EPSBearerID",
@@ -713,6 +726,16 @@ var ieTypeNameMap = map[uint8]string{
 	211: "BitRate",
 	212: "PC5QoSFlow",
 	213: "SGiPtPTunnelAddress",
+	214: "PGWChangeInfo",
+	215: "PGWFQDN",
+	216: "GroupID",
+	217: "PSCellID",
+	218: "UPSecurityPolicy",
+	219: "AlternativeIMSI",
+	220: "NFInstanceID",
+	221: "TimerInSeconds",
+	222: "MDTConfigurationNR",
+	223: "URI",
 	254: "SpecialIETypeForIETypeExtension",
 	255: "PrivateExtension",
 }

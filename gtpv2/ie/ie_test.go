@@ -70,17 +70,7 @@ var cases = []struct {
 		[]byte{0x4c, 0x00, 0x08, 0x00, 0x21, 0x43, 0x05, 0x21, 0x43, 0x65, 0x87, 0xf9},
 	}, {
 		"Indication",
-		ie.NewIndication(
-			1, 0, 1, 0, 0, 0, 0, 1,
-			0, 0, 0, 0, 1, 0, 0, 0,
-			0, 0, 0, 1, 0, 1, 0, 1,
-			0, 0, 0, 1, 0, 0, 0, 0,
-			1, 0, 0, 0, 1, 0, 0, 0,
-			1, 0, 0, 0, 0, 0, 0, 1,
-			0, 1, 0, 0, 0, 0, 0, 0,
-			1, 0, 1, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 1,
-		),
+		ie.NewIndication(ie.IndicationDAF, ie.IndicationHI, ie.IndicationSGWCI, ie.IndicationPS, ie.IndicationS6AF, ie.IndicationMBMDT, ie.IndicationCCRSI, ie.IndicationPPON, ie.IndicationNSI, ie.IndicationPSCI, ie.IndicationROAAI, ie.IndicationWPMSI, ie.IndicationREPREFI, ie.IndicationCSRMFI, ie.IndicationMTEDTA, ie.IndicationEMCI),
 		[]byte{0x4d, 0x00, 0x09, 0x00, 0xa1, 0x08, 0x15, 0x10, 0x88, 0x81, 0x40, 0xa0, 0x01},
 	}, {
 		"IndicationFromBitSequence",
@@ -491,7 +481,7 @@ var cases = []struct {
 		[]byte{0x5f, 0x00, 0x02, 0x00, 0xff, 0xff},
 	}, {
 		"BearerFlags",
-		ie.NewBearerFlags(1, 1, 1, 1),
+		ie.NewBearerFlags(0, 1, 1, 1, 1),
 		[]byte{0x61, 0x00, 0x01, 0x00, 0x0f},
 	}, {
 		"PDNType",

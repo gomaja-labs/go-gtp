@@ -43,6 +43,7 @@ var (
 		SCEFPDNConnection:          true,
 		V2XContext:                 true,
 		PC5QoSParameters:           true,
+		PGWChangeInfo:              true, // TS 29.274 §8.145.
 	}
 	isGroupedFun = func(t uint8) bool {
 		mu.RLock()

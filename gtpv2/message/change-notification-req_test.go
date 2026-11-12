@@ -21,17 +21,7 @@ func TestChangeNotificationRequest(t *testing.T) {
 				testutils.TestBearerInfo.TEID, testutils.TestBearerInfo.Seq,
 				ie.NewIMSI("123451234567890"),
 				ie.NewMobileEquipmentIdentity("123450123456789"),
-				ie.NewIndication(
-					1, 0, 1, 0, 0, 0, 0, 1,
-					0, 0, 0, 0, 1, 0, 0, 0,
-					0, 0, 0, 1, 0, 1, 0, 1,
-					0, 0, 0, 1, 0, 0, 0, 0,
-					1, 0, 0, 0, 1, 0, 0, 0,
-					1, 0, 0, 0, 0, 0, 0, 1,
-					0, 1, 0, 0, 0, 0, 0, 0,
-					1, 0, 1, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 1,
-				),
+				ie.NewIndication(ie.IndicationDAF, ie.IndicationHI, ie.IndicationSGWCI, ie.IndicationPS, ie.IndicationS6AF, ie.IndicationMBMDT, ie.IndicationCCRSI, ie.IndicationPPON, ie.IndicationNSI, ie.IndicationPSCI, ie.IndicationROAAI, ie.IndicationWPMSI, ie.IndicationREPREFI, ie.IndicationCSRMFI, ie.IndicationMTEDTA, ie.IndicationEMCI),
 				ie.NewRATType(gtpv2.RATTypeEUTRAN),
 				ie.NewUserLocationInformation(
 					ie.NewCGI("123", "45", 0x1111, 0x2222),

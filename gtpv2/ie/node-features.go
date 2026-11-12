@@ -119,3 +119,9 @@ func (i *IE) HasMTEDT() bool {
 
 	return has7thBit(v)
 }
+
+// HasPSSET reports PGW-C/SMF Set support (TS 29.274 Table 8.83-1, octet 5 bit 8).
+func (i *IE) HasPSSET() bool {
+	v, err := i.NodeFeatures()
+	return err == nil && v&0x80 != 0
+}

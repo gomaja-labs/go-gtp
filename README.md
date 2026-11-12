@@ -110,18 +110,22 @@ The API targets the latest main and does not retain compatibility wrappers.
 - Replace the old logger interface with `SetLogger(*slog.Logger)` in each
   connection package; pass nil to disable logging.
 - Check IE `Err()` and accessor errors. Invalid digits, addresses, lengths and
-  overflowing fields now fail instead of being silently truncated. Shared
+  overflowing fields fail instead of being silently truncated. Shared
   TBCD/BCD and FQDN helpers return errors; use `utils.DecodePLMN` instead of the
   removed `DecodeMCC`/`DecodeMNC` helpers.
 - Build GTPv2 ULI using `NewUserLocationInformation` with typed location structs.
   The old positional/lazy constructors, `NewUserLocationInformationStruct` and
   `UserLocationInfo` alias are removed. `NewRAI` takes a `uint8` RAC. The removed
   ARP aliases are replaced by `HasPCI`/`HasPVI`.
-- GTPv1 `NewTEIDDataII` now takes NSAPI and TEID. GTPv2 `NewRFSPIndex` and its
+- GTPv1 `NewTEIDDataII` takes NSAPI and TEID. GTPv2 `NewRFSPIndex` and its
   accessors use `uint16`; `NewIntegerNumber` takes a `uint32` value and an explicit
   width. Its accessors return `uint32`. Extended PCO constructors/accessors take
   a `PCODirection`; secondary RAT usage reports use typed fields. Use
   `TimestampNear` when resolving a timestamp's NTP era against a known time.
+- Build GTPv2 Indication IEs with `NewIndication(flags ...IndicationFlag)`.
+  `Has<X>` accessor names follow the flag constants, for example `HasPMTSMI`
+  pairs with `IndicationPMTSMI`.
+- Use GTPv2 `NewBearerFlags(uhrrei, asi, vInd, vb, ppc)` for all five flags.
 - Update callers of retyped message fields: repeated monitoring, load and
   overload IEs use slices. In bearer responses, use
   `MMESGSNIdentifierOrUELocalIPAddress`; its IP Address instance 0 meaning

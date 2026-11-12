@@ -352,7 +352,7 @@ func TestGroupedAccessorsUseInstanceZero(t *testing.T) {
 	}{
 		{"Cause", NewCause(16, 0, 0, 1, nil)},
 		{"CauseFlags", NewCause(16, 1, 0, 1, nil)},
-		{"BearerFlags", NewBearerFlags(1, 0, 1, 0)},
+		{"BearerFlags", NewBearerFlags(0, 1, 0, 1, 0)},
 		{"BearerQoS", NewBearerQoS(1, 2, 1, 9, 1, 2, 3, 4)},
 		{"ChargingID", NewChargingID(0x12345678)},
 		{"EPSBearerID", NewEPSBearerID(5)},

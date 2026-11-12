@@ -324,7 +324,7 @@ func TestDelayUnit(t *testing.T) {
 	}
 }
 func TestBooleanMasks(t *testing.T) {
-	b := NewBearerFlags(1, 1, 1, 1)
+	b := NewBearerFlags(0, 1, 1, 1, 1)
 	for _, c := range []struct {
 		name string
 		got  bool

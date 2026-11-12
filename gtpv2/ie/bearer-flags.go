@@ -4,13 +4,15 @@
 
 package ie
 
-// NewBearerFlags creates a new BearerFlags IE.
-func NewBearerFlags(asi, vInd, vb, ppc uint8) *IE {
+// NewBearerFlags creates a BearerFlags IE from bits 5 through 1, in that order.
+func NewBearerFlags(uhrrei, asi, vInd, vb, ppc uint8) *IE {
 	// TS 29.274 §8.32: reject fields that do not fit.
-	if asi > 1 || vInd > 1 || vb > 1 || ppc > 1 {
+	if uhrrei > 1 || asi > 1 || vInd > 1 || vb > 1 || ppc > 1 {
 		return newErrorIE(BearerFlags, ErrMalformed)
 	}
 	i := New(BearerFlags, 0x00, make([]byte, 1))
+	// TS 29.274 §8.32 clause text: UHRREI is bit 5.
+	i.Payload[0] |= uhrrei << 4
 	i.Payload[0] |= ((asi << 3 & 0x08) | (vInd << 2 & 0x04) | (vb << 1 & 0x2) | ppc&0x01)
 	return i
 }
@@ -152,4 +154,10 @@ func (i *IE) ProhibitPayloadCompression() bool {
 		return false
 	}
 	return v&0x01 != 0
+}
+
+// HasUHRREI reports whether UHRR is enabled (TS 29.274 §8.32, octet 5 bit 5).
+func (i *IE) HasUHRREI() bool {
+	v, err := i.BearerFlags()
+	return err == nil && v&0x10 != 0
 }
