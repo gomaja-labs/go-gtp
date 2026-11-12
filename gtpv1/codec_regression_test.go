@@ -74,7 +74,7 @@ func TestErrorIndicationWildcardAddress(t *testing.T) {
 }
 
 func TestRelayShortPacket(t *testing.T) {
-	if os.Getenv("REVIEW_C001_CHILD") == "1" {
+	if os.Getenv("GTPV1_SHORT_RELAY_PACKET_CHILD") == "1" {
 		u, p := testConnection()
 		_ = u.RelayTo(u, 1, 2, p.LocalAddr())
 		n := 0
@@ -92,7 +92,7 @@ func TestRelayShortPacket(t *testing.T) {
 		return
 	}
 	c := exec.Command(os.Args[0], "-test.run=^TestRelayShortPacket$", "-test.timeout=3s")
-	c.Env = append(os.Environ(), "REVIEW_C001_CHILD=1")
+	c.Env = append(os.Environ(), "GTPV1_SHORT_RELAY_PACKET_CHILD=1")
 	out, err := c.CombinedOutput()
 	if err != nil {
 		t.Fatalf("short relay datagram crashed process: %s", out)

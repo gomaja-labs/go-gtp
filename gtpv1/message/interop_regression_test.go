@@ -9,7 +9,7 @@ import (
 )
 
 // https://github.com/secdev/scapy/commit/7bf257e6eb1a; TS 29.281 V19.2.0 §5.2.2.1.
-func TestInteropR006UDPPortExtensionLength(t *testing.T) {
+func TestInteropUDPPortExtensionLength(t *testing.T) {
 	b, err := message.NewExtensionHeader(0x40, []byte{0x08, 0x68}, 0).Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +20,7 @@ func TestInteropR006UDPPortExtensionLength(t *testing.T) {
 }
 
 // https://github.com/travelping/gtplib/commit/0c9e2bba47ef; TS 29.281 V19.2.0 §5.2.1.
-func TestInteropR012ExtensionChain(t *testing.T) {
+func TestInteropExtensionChain(t *testing.T) {
 	raw := []byte{0x34, 255, 0, 13, 0, 0, 0, 1, 0, 0, 0, 0x40, 1, 8, 0x68, 0xc0, 1, 0x12, 0x34, 0, 0x45}
 	h, err := message.ParseHeader(raw)
 	if err != nil {
@@ -39,7 +39,7 @@ func TestInteropR012ExtensionChain(t *testing.T) {
 }
 
 // https://github.com/wireshark/wireshark/commit/7557909a8395; TS 29.281 V19.2.0 §5.1.
-func TestInteropR017TEIDWidth(t *testing.T) {
+func TestInteropTEIDWidth(t *testing.T) {
 	h, err := message.ParseHeader([]byte{0x30, 255, 0, 1, 0x12, 0x34, 0x56, 0x78, 0x45})
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestInteropR017TEIDWidth(t *testing.T) {
 }
 
 // https://github.com/open5gs/open5gs/commit/3b6da3ddb2d0; TS 29.060 V19.0.0 §8.2.
-func TestInteropR020ControlSequence(t *testing.T) {
+func TestInteropControlSequence(t *testing.T) {
 	for _, m := range []interface{ Marshal() ([]byte, error) }{message.NewEchoResponse(0x1234, ie.NewRecovery(1)), message.NewVersionNotSupported(0, 0x1234)} {
 		b, err := m.Marshal()
 		if err != nil {
@@ -63,7 +63,7 @@ func TestInteropR020ControlSequence(t *testing.T) {
 }
 
 // https://github.com/edgecomllc/eupf/commit/24488216f22c; TS 29.281 V19.2.0 §5.1.
-func TestInteropR023SequenceOnlyGPDU(t *testing.T) {
+func TestInteropSequenceOnlyGPDU(t *testing.T) {
 	h, err := message.ParseHeader([]byte{0x32, 255, 0, 5, 0, 0, 0, 1, 0x12, 0x34, 0, 0, 0x45})
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestInteropR023SequenceOnlyGPDU(t *testing.T) {
 }
 
 // https://github.com/edgecomllc/eupf/commit/19593cf57282; TS 29.281 V19.2.0 §§5.1, 7.2.1.
-func TestInteropR029EchoSequenceLength(t *testing.T) {
+func TestInteropEchoSequenceLength(t *testing.T) {
 	b, err := message.NewEchoRequest(0x1234).Marshal()
 	if err != nil {
 		t.Fatal(err)

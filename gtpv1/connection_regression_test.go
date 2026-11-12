@@ -20,6 +20,11 @@ func listenUDP(t *testing.T, ip string, port int) *net.UDPConn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = c.Close() })
+	// macOS limits a UDP datagram to the send buffer (9216 octets by default);
+	// the tests send datagrams up to 64 KiB.
+	if err := c.SetWriteBuffer(1 << 17); err != nil {
+		t.Fatal(err)
+	}
 	return c
 }
 
@@ -127,7 +132,7 @@ func TestLargeDatagramDelivery(t *testing.T) {
 	}
 }
 
-func TestC061_WildcardDestinationAndPort(t *testing.T) {
+func TestErrorIndicationWildcardDestinationAndPort(t *testing.T) {
 	// TS 29.281 §§4.4.2.4, 7.3.1: notify port 2152 with the original destination address.
 	sock := listenUDP(t, "0.0.0.0", 0)
 	u := serveUDP(t, sock, nil)
@@ -194,7 +199,7 @@ func TestEchoWildcardSourceAndSequence(t *testing.T) {
 	}
 }
 
-func TestC043_CancelHandshake(t *testing.T) {
+func TestDialUPlaneCancelHandshake(t *testing.T) {
 	server := listenUDP(t, "127.0.0.1", 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

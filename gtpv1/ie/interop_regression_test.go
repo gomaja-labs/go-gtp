@@ -10,7 +10,7 @@ import (
 )
 
 // https://github.com/secdev/scapy/commit/104d5ead0800; TS 29.060 V19.0.0 §7.7: TLV Length excludes three header octets.
-func TestInteropR001V1TLVLength(t *testing.T) {
+func TestInteropV1TLVLength(t *testing.T) {
 	b, err := ie.NewMSTimeZone(time.Hour, 0).Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -21,7 +21,7 @@ func TestInteropR001V1TLVLength(t *testing.T) {
 }
 
 // https://github.com/secdev/scapy/commit/d223f4d32eb6; TS 29.060 V19.0.0 §7.7.32.
-func TestInteropR005IPv6GSN(t *testing.T) {
+func TestInteropIPv6GSN(t *testing.T) {
 	b, err := ie.NewGSNAddress("fd01:1::1").Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func TestInteropR005IPv6GSN(t *testing.T) {
 }
 
 // https://github.com/travelping/gtplib/commit/a16cc690e9c1; TS 29.060 V19.0.0 §7.7.2.
-func TestInteropR010ShortIMSIFiller(t *testing.T) {
+func TestInteropShortIMSIFiller(t *testing.T) {
 	b, err := ie.NewIMSI("001010123456").Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestInteropR010ShortIMSIFiller(t *testing.T) {
 }
 
 // https://github.com/travelping/gtplib/commit/f3702b2dd10c; TS 29.060 V19.0.0 §7.7.1.
-func TestInteropR015CauseSystemFailure(t *testing.T) {
+func TestInteropCauseSystemFailure(t *testing.T) {
 	b, err := ie.NewCause(gtpv1.ResCauseSystemFailure).Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestInteropR015CauseSystemFailure(t *testing.T) {
 }
 
 // https://github.com/wireshark/wireshark/commit/cf6a3deae44c; TS 29.060 V19.0.0 §7.7.118.
-func TestInteropR018PMTSMIBit(t *testing.T) {
+func TestInteropPMTSMIBit(t *testing.T) {
 	p := ie.NewExtendedCommonFlagsII(1, 0, 0)
 	if len(p.Payload) != 1 || p.Payload[0] != 4 || !p.IsPMTSMI() || p.IsDTCI() {
 		t.Fatalf("flags = %x", p.Payload)
@@ -71,7 +71,7 @@ func TestInteropR018PMTSMIBit(t *testing.T) {
 }
 
 // https://github.com/wireshark/wireshark/commit/9ff6bb28d2d0; TS 29.060 V19.0.0 §7.7.51 Figure 7.7.51.4.
-func TestInteropR028V1ULIRAIPadding(t *testing.T) {
+func TestInteropV1ULIRAIPadding(t *testing.T) {
 	b, err := ie.NewUserLocationInformationWithRAI("001", "01", 0x1234, 0x56).Marshal()
 	if err != nil {
 		t.Fatal(err)

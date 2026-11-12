@@ -135,6 +135,6 @@ jobs:
           go-version: stable
       - name: loopback aliases
         if: runner.os == 'macOS'
-        run: for a in 2 11 12; do sudo ifconfig lo0 alias "127.0.0.$a"; done
+        run: for a in 2 3 4 11 12; do sudo ifconfig lo0 alias "127.0.0.$a"; done
       - name: go test
         run: go test ./... -shuffle=on -count=1 -timeout 900s

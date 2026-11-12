@@ -298,7 +298,7 @@ func TestEachMandatoryCreateIE(t *testing.T) {
 	}
 }
 
-func TestC038_PrivateExtensionsAndUnknownIEs(t *testing.T) {
+func TestPrivateExtensionsAndUnknownIEs(t *testing.T) {
 	m := NewEchoRequest(1, ie.NewPrivateExtension(1, []byte{1}), ie.NewPrivateExtension(2, []byte{2}), ie.New(240, []byte{3}))
 	b, err := m.Marshal()
 	if err != nil {

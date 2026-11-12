@@ -21,6 +21,11 @@ func udpPeer(t *testing.T) net.PacketConn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = pc.Close() })
+	// macOS limits a UDP datagram to the send buffer (9216 octets by default);
+	// the tests send datagrams up to 64 KiB.
+	if err := pc.(*net.UDPConn).SetWriteBuffer(1 << 17); err != nil {
+		t.Fatal(err)
+	}
 	return pc
 }
 func udpServer(t *testing.T, configure func(*Conn)) *Conn {

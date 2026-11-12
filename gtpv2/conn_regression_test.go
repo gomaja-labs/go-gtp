@@ -28,7 +28,7 @@ type testPacketConn struct {
 	hook   func([]byte) error
 }
 
-func newReviewPC() *testPacketConn {
+func newTestPacketConn() *testPacketConn {
 	return &testPacketConn{input: make(chan testDatagram, 128), done: make(chan struct{})}
 }
 func (p *testPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
@@ -61,7 +61,7 @@ func (p *testPacketConn) SetWriteDeadline(time.Time) error { return nil }
 func testPeer() net.Addr                                   { return &net.UDPAddr{IP: net.IPv4(192, 0, 2, 2), Port: 43210} }
 func testConnection(t testing.TB) (*Conn, *testPacketConn) {
 	c := NewConn(&net.UDPAddr{}, 10, 1)
-	p := newReviewPC()
+	p := newTestPacketConn()
 	c.pktConn = p
 	t.Cleanup(func() { _ = c.Close() })
 	return c, p
@@ -461,7 +461,7 @@ func TestConnLocalAddrBeforeListen(t *testing.T) {
 
 func TestConnListenFailure(t *testing.T) {
 	c, p := testConnection(t)
-	c.laddr = &net.UnixAddr{Net: "review-invalid-network", Name: "unused"}
+	c.laddr = &net.UnixAddr{Net: "invalid-network", Name: "unused"}
 	if err := c.Listen(context.Background()); err == nil {
 		t.Fatal("invalid network accepted")
 	}
