@@ -169,6 +169,16 @@ const (
 	BitRate                                              uint8 = 211
 	PC5QoSFlow                                           uint8 = 212
 	SGiPtPTunnelAddress                                  uint8 = 213
+	PGWChangeInfo                                        uint8 = 214
+	PGWFQDN                                              uint8 = 215
+	GroupID                                              uint8 = 216
+	PSCellID                                             uint8 = 217
+	UPSecurityPolicy                                     uint8 = 218
+	AlternativeIMSI                                      uint8 = 219
+	NFInstanceID                                         uint8 = 220
+	TimerInSeconds                                       uint8 = 221
+	MDTConfigurationNR                                   uint8 = 222
+	URI                                                  uint8 = 223
 	SpecialIETypeForIETypeExtension                      uint8 = 254
 	PrivateExtension                                     uint8 = 255
 )
@@ -713,6 +723,16 @@ var ieTypeNameMap = map[uint8]string{
 	211: "BitRate",
 	212: "PC5QoSFlow",
 	213: "SGiPtPTunnelAddress",
+	214: "PGWChangeInfo",
+	215: "PGWFQDN",
+	216: "GroupID",
+	217: "PSCellID",
+	218: "UPSecurityPolicy",
+	219: "AlternativeIMSI",
+	220: "NFInstanceID",
+	221: "TimerInSeconds",
+	222: "MDTConfigurationNR",
+	223: "URI",
 	254: "SpecialIETypeForIETypeExtension",
 	255: "PrivateExtension",
 }

@@ -26,6 +26,10 @@ func FuzzRoundTrip(f *testing.F) {
 		f.Add(b)
 	}
 	f.Add([]byte{0x58, 33, 0, 8, 0, 0, 0, 0, 0, 0, 1, 0, 0x48, 95, 0, 8, 0, 0, 0, 0, 0, 0, 2, 0})
+	// Create Session Response with a PGW Change Info (TS 29.274 §8.145) holding
+	// an IP Address child, valid and with the child crossing the group end.
+	f.Add([]byte{0x48, 33, 0, 26, 0, 0, 0, 1, 0, 0, 3, 0, 2, 0, 2, 0, 16, 0, 0xd6, 0, 8, 0, 74, 0, 4, 0, 192, 0, 2, 99})
+	f.Add([]byte{0x48, 33, 0, 26, 0, 0, 0, 1, 0, 0, 3, 0, 2, 0, 2, 0, 16, 0, 0xd6, 0, 8, 0, 74, 0, 5, 0, 192, 0, 2, 99})
 	f.Fuzz(func(t *testing.T, b []byte) {
 		m, err := message.Parse(b)
 		if err != nil {

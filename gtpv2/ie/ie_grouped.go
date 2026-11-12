@@ -32,6 +32,9 @@ func NewGroupedIE(itype uint8, ies ...*IE) *IE {
 // We're using map to avoid iterating over a list.
 // The value `true` is not actually used.
 // TODO: consider using a slice with utils in slices package introduced in Go 1.21.
+//
+// These are all the grouped IEs of TS 29.274 V20.0.0 (Table 8.1-1, §§8.28,
+// 8.39, 8.111, 8.112, 8.122, 8.126, 8.139, 8.140 and 8.145).
 var (
 	mu                  sync.RWMutex
 	defaultGroupedIEMap = map[uint8]bool{
@@ -43,6 +46,7 @@ var (
 		SCEFPDNConnection:          true,
 		V2XContext:                 true,
 		PC5QoSParameters:           true,
+		PGWChangeInfo:              true,
 	}
 	isGroupedFun = func(t uint8) bool {
 		mu.RLock()
