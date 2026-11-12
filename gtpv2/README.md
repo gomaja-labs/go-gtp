@@ -71,8 +71,10 @@ func ExampleIE_Err() {
 ```
 
 See the [root conventions](../README.md#api-conventions) for buffer lifetimes,
-decode error handling and marshaling. Generic codecs preserve framed data; they
-do not implement the procedure rules for unsupported message types.
+decode error handling and marshaling. Generic codecs preserve framed data,
+including a piggybacked message, which `ParseGeneric` also decodes as
+`*message.Generic`; they do not implement the procedure rules for unsupported
+message types.
 
 ## Conn
 

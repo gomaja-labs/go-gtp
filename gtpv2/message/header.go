@@ -31,6 +31,7 @@ type Header struct {
 	// Piggybacked is the optional second message in the datagram. Marshal sets
 	// P from this field; Length describes only the first message (TS 29.274 §5.5.1).
 	// Process this message after the enclosing message (TS 29.274 §7.7.0).
+	// Parse decodes it in its typed form, ParseGeneric as a *Generic.
 	Piggybacked Message
 	// PiggybackError reports a secondary-message decode failure. The primary
 	// message remains usable (TS 29.274 §7.7.0); encoders reject this state.
@@ -173,7 +174,8 @@ func (h *Header) MarshalTo(b []byte) error {
 	return nil
 }
 
-// ParseHeader decodes a complete datagram, retaining its optional second message.
+// ParseHeader decodes a complete datagram, retaining its optional second message
+// in its typed form (see UnmarshalBinary).
 func ParseHeader(b []byte) (*Header, error) {
 	h := &Header{}
 	if err := h.UnmarshalBinary(b); err != nil {
@@ -185,7 +187,14 @@ func ParseHeader(b []byte) (*Header, error) {
 // UnmarshalBinary resets the header and decodes a complete datagram.
 // LengthError carries the safely decoded transaction fields needed by §7.7.3;
 // UnsupportedVersionError supports the version-specific handling in §7.7.2.
+// A piggybacked message is decoded with Parse; ParseGeneric keeps it Generic.
 func (h *Header) UnmarshalBinary(b []byte) error {
+	return h.unmarshal(b, Parse)
+}
+
+// unmarshal decodes a complete datagram. decodeSecondary decodes the piggybacked
+// message once the framing of the whole datagram has been checked.
+func (h *Header) unmarshal(b []byte, decodeSecondary func([]byte) (Message, error)) error {
 	if h == nil {
 		return ErrNilMessage
 	}
@@ -235,7 +244,7 @@ func (h *Header) UnmarshalBinary(b []byte) error {
 		if b[end]&0x10 != 0 || !validPiggyback(h.Type, b[end+1]) {
 			h.PiggybackError = ErrInvalidPiggyback
 		} else {
-			h.Piggybacked, h.PiggybackError = Parse(b[end:])
+			h.Piggybacked, h.PiggybackError = decodeSecondary(b[end:])
 		}
 	} else if end != len(b) {
 		return lengthErr

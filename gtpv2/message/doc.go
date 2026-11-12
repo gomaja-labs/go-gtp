@@ -19,6 +19,8 @@
 //
 // Parse and the typed ParseXxx functions consume a complete datagram. A valid
 // piggybacked message is available through Message.GetHeader().Piggybacked.
+// Parse decodes it in its typed form. ParseGeneric decodes it as a *Generic, so
+// the datagram re-encodes unchanged apart from spare bits.
 // A secondary decode failure is recorded in GetHeader().PiggybackError and does
 // not reject the primary message (§7.7.0). The overall datagram lengths must
 // still agree (§7.7.3). Both decoding results must be inspected independently.

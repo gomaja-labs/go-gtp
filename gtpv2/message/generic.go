@@ -99,26 +99,39 @@ func ParseGeneric(b []byte) (*Generic, error) {
 	return g, nil
 }
 
-// UnmarshalBinary decodes a given byte sequence as a Generic.
+// UnmarshalBinary decodes a given byte sequence as a Generic. A piggybacked
+// message is decoded as a Generic as well, so Marshal reproduces the datagram
+// whatever the IE order of either message (TS 29.274 §§5.5.1, 8.1).
 func (g *Generic) UnmarshalBinary(b []byte) error {
 	if g == nil {
 		return ErrNilMessage
 	}
 	*g = Generic{}
-	var err error
-	g.Header, err = ParseHeader(b)
-	if err != nil {
+	h := &Header{}
+	if err := h.unmarshal(b, parseGenericMessage); err != nil {
 		return err
 	}
+	g.Header = h
 	if len(g.Header.Payload) == 0 {
 		return nil
 	}
 
+	var err error
 	g.IEs, err = ie.ParseMultiIEs(g.Header.Payload)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// parseGenericMessage decodes a piggybacked message for Generic. On failure it
+// returns a nil Message rather than a nil *Generic, so Piggybacked stays nil.
+func parseGenericMessage(b []byte) (Message, error) {
+	g, err := ParseGeneric(b)
+	if err != nil {
+		return nil, err
+	}
+	return g, nil
 }
 
 // MarshalLen returns the serial length of Data.
