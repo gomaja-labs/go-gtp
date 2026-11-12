@@ -2,10 +2,10 @@
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
-// Package gtpv0 provides simple and painless handling of GTPv0 protocol in pure Golang.
-//
-// This package is still under construction. The networking feature would be available in the future.
-// Please see README.md for detailed usage of the APIs provided by this package.
-//
-// https://github.com/gomaja-labs/go-gtp/blob/main/gtpv0/README.md
+// Package gtpv0 documents the GTPv0 codecs in its message and ie subpackages,
+// following GSM 09.60 V7.10.0. It provides no connection layer or PDP context
+// state machine. Use message.Marshal and message.Parse with application-owned
+// datagram I/O. IE constructors carry errors available through IE.Err;
+// accessors on nil IEs return ie.ErrIENotFound. Parsed values may reference
+// the input buffer and must not outlive its reuse or modification.
 package gtpv0

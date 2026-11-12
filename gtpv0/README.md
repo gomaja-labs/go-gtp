@@ -1,115 +1,121 @@
-# v0: GTPv0 in Golang
+# GTPv0
 
-Package v0 provides simple and painless handling of GTPv0 protocol in pure Golang.
+GTPv0 message and IE codecs follow GSM 09.60 V7.10.0. There is no connection
+layer or PDP context state machine in this package. Use your own datagram I/O.
 
-## Getting Started
+## Codecs
 
-This package is still under construction.
-See the source codes for what you can do with the current implementation. 
+Import this version's `ie` and `message` subpackages. This complete function is
+[Example_codecs](example_test.go); it builds a message with an IE, marshals it,
+parses a datagram, checks the concrete type and reads the IE with error handling.
 
-### Creating a PDP Context as a client
+```go
+func Example_codecs() {
+	msg := message.NewEchoResponse(1, 0, 0, ie.NewRecovery(0))
+	wire, err := message.Marshal(msg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	parsed, err := message.Parse(wire)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	echo, ok := parsed.(*message.EchoResponse)
+	if !ok {
+		fmt.Printf("unexpected message %T\n", parsed)
+		return
+	}
+	recovery, err := echo.Recovery.Recovery()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(echo.MessageTypeName(), recovery)
+	// Output: Echo Response 0
+}
+```
 
-_NOT IMPLEMENTED YET!_
+IE constructors return an error-carrying `*ie.IE`, not a separate error. Check
+`Err()` and use typed accessors, which return `ie.ErrIENotFound` on nil receivers.
+[ExampleIE_Err](ie/example_test.go) is an executable example:
 
-### Waiting for a PDP Context to be created as a server
+```go
+func ExampleIE_Err() {
+	invalid := ie.NewIMSI("1234567890123456")
+	fmt.Println(errors.Is(invalid.Err(), ie.ErrInvalidLength))
 
-_NOT IMPLEMENTED YET!_
+	var missing *ie.IE
+	_, err := missing.IMSI()
+	fmt.Println(errors.Is(err, ie.ErrIENotFound))
 
-### Opening a U-Plane connection
+	valid := ie.NewIMSI("001010123456789")
+	if err := valid.Err(); err != nil {
+		fmt.Println(err)
+		return
+	}
+	imsi, err := valid.IMSI()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(imsi)
+	// Output:
+	// true
+	// true
+	// 001010123456789
+}
+```
 
-_NOT IMPLEMENTED YET!_
+See the [root conventions](../README.md#api-conventions) for buffer lifetimes,
+decode error handling and marshaling. Generic codecs preserve framed data; they
+do not implement the procedure rules for unsupported message types.
 
-## Supported Features
+## Message support
 
-The following Messages marked with "Yes" are currently available with their own useful constructors.
+These types have dedicated structs, constructors and parsing dispatch in
+[message/message.go](message/message.go). Other types parse as `message.Generic`;
+`NewGeneric` constructs one. A named type constant alone is not typed support.
 
-_Even there are some missing Messages, you can create any kind of Message by using `message.NewGeneric()`._
+| Type | Typed message | Constructor |
+| --- | --- | --- |
+| 1 | [EchoRequest](message/echo-req.go) | `NewEchoRequest` |
+| 2 | [EchoResponse](message/echo-res.go) | `NewEchoResponse` |
+| 16 | [CreatePDPContextRequest](message/create-pdp-context-req.go) | `NewCreatePDPContextRequest` |
+| 17 | [CreatePDPContextResponse](message/create-pdp-context-res.go) | `NewCreatePDPContextResponse` |
+| 18 | [UpdatePDPContextRequest](message/update-pdp-context-req.go) | `NewUpdatePDPContextRequest` |
+| 19 | [UpdatePDPContextResponse](message/update-pdp-context-res.go) | `NewUpdatePDPContextResponse` |
+| 20 | [DeletePDPContextRequest](message/delete-pdp-context-req.go) | `NewDeletePDPContextRequest` |
+| 21 | [DeletePDPContextResponse](message/delete-pdp-context-res.go) | `NewDeletePDPContextResponse` |
+| 255 | [TPDU](message/t-pdu.go) | `NewTPDU` |
 
-### Messages
+## IE support
 
-| ID      | Name                                        | Supported |
-|---------|---------------------------------------------|-----------|
-| 0       | (Spare/Reserved)                            | -         |
-| 1       | Echo Request                                | Yes       |
-| 2       | Echo Response                               | Yes       |
-| 3       | Version Not Supported                       |           |
-| 4       | Node Alive Request                          |           |
-| 5       | Node Alive Response                         |           |
-| 6       | Redirection Request                         |           |
-| 7       | Redirection Response                        |           |
-| 8-15    | (Spare/Reserved)                            | -         |
-| 16      | Create PDP Context Request                  | Yes       |
-| 17      | Create PDP Context Response                 | Yes       |
-| 18      | Update PDP Context Request                  | Yes       |
-| 19      | Update PDP Context Response                 | Yes       |
-| 20      | Delete PDP Context Request                  | Yes       |
-| 21      | Delete PDP Context Response                 | Yes       |
-| 22      | Create AA PDP Context Request               |           |
-| 23      | Create AA PDP Context Response              |           |
-| 24      | Delete AA PDP Context Request               |           |
-| 25      | Delete AA PDP Context Response              |           |
-| 26      | Error Indication                            |           |
-| 27      | PDU Notification Request                    |           |
-| 28      | PDU Notification Response                   |           |
-| 29      | PDU Notification Reject Request             |           |
-| 30      | PDU Notification Reject Response            |           |
-| 31      | (Spare/Reserved)                            | -         |
-| 32      | Send Routeing Information for GPRS Request  |           |
-| 33      | Send Routeing Information for GPRS Response |           |
-| 34      | Failure Report Request                      |           |
-| 35      | Failure Report Response                     |           |
-| 36      | Note MS GPRS Present Request                |           |
-| 37      | Note MS GPRS Present Response               |           |
-| 38-47   | (Spare/Reserved)                            | -         |
-| 48      | Identification Request                      |           |
-| 49      | Identification Response                     |           |
-| 50      | SGSN Context Request                        |           |
-| 51      | SGSN Context Response                       |           |
-| 52      | SGSN Context Acknowledge                    |           |
-| 53-239  | (Spare/Reserved)                            | -         |
-| 240     | Data Record Transfer Request                |           |
-| 241     | Data Record Transfer Response               |           |
-| 242-254 | (Spare/Reserved)                            | -         |
-| 255     | T-PDU                                       | Yes       |
+These source files provide typed constructors returning `*ie.IE`; associated
+field structs and accessors are documented in the linked files. Types without
+such helpers can use `ie.New` with raw payloads and the generic scalar helpers
+in [ie/ie.go](ie/ie.go). This table lists helper availability, not complete
+procedure or feature coverage.
 
-### Information Elements
-
-The following Information Elements marked with "Yes" are currently available with their own useful constructors.
-
-_Even there are some missing IEs, you can create any kind of IEs by using `ie.New()` function or by initializing ie.IE directly._
-
-| ID      | Name                                   | Supported |
-|---------|----------------------------------------|-----------|
-| 0       | (Spare/Reserved)                       | -         |
-| 1       | Cause                                  | Yes       |
-| 2       | IMSI                                   | Yes       |
-| 3       | Routeing Area Identity (RAI)           | Yes       |
-| 4       | Temporary Logical Link Identity (TLLI) | Yes       |
-| 5       | Packet TMSI (P-TMSI)                   | Yes       |
-| 6       | Quality of Service (QoS) Profile       | Yes       |
-| 7       | (Spare/Reserved)                       | -         |
-| 8       | Reordering Required                    | Yes       |
-| 9       | Authentication Triplet                 |           |
-| 10      | (Spare/Reserved)                       | -         |
-| 11      | MAP Cause                              |           |
-| 12      | P-TMSI Signature                       | Yes       |
-| 13      | MS Validated                           |           |
-| 14      | Recovery                               | Yes       |
-| 15      | Selection mode                         | Yes       |
-| 16      | Flow Label Data I                      | Yes       |
-| 17      | Flow Label Signalling                  | Yes       |
-| 18      | Flow Label Data II                     | Yes       |
-| 19      | MS Not Reachable Reason                | Yes       |
-| 20-126  | (Spare/Reserved)                       | -         |
-| 127     | Charging ID                            | Yes       |
-| 128     | End User Address                       | Yes       |
-| 129     | MM Context                             |           |
-| 130     | PDP Context                            |           |
-| 131     | Access Point Name                      | Yes       |
-| 132     | Protocol Configuration Options         |           |
-| 133     | GSN Address                            | Yes       |
-| 134     | MSISDN                                 | Yes       |
-| 135-250 | (Spare/Reserved)                       | -         |
-| 251     | Charging Gateway Address               | Yes       |
-| 252-254 | (Spare/Reserved)                       | -         |
-| 255     | Private Extension                      | Yes       |
+| IE family (source) | Typed constructors returning `*IE` |
+| --- | --- |
+| [apn](ie/apn.go) | `NewAccessPointName` |
+| [cause](ie/cause.go) | `NewCause` |
+| [charging-gateway-address](ie/charging-gateway-address.go) | `NewChargingGatewayAddress` |
+| [charging-id](ie/charging-id.go) | `NewChargingID` |
+| [end-user-address](ie/end-user-address.go) | `NewEndUserAddress`, `NewEndUserAddressIPv4`, `NewEndUserAddressIPv6`, `NewEndUserAddressPPP` |
+| [flow-label](ie/flow-label.go) | `NewFlowLabelDataI`, `NewFlowLabelSignalling`, `NewFlowLabelDataII` |
+| [gsn-address](ie/gsn-address.go) | `NewGSNAddress` |
+| [imsi](ie/imsi.go) | `NewIMSI` |
+| [ms-not-reachable-reason](ie/ms-not-reachable-reason.go) | `NewMSNotReachableReason` |
+| [msisdn](ie/msisdn.go) | `NewMSISDN` |
+| [p-tmsi-signature](ie/p-tmsi-signature.go) | `NewPTMSISignature` |
+| [p-tmsi](ie/p-tmsi.go) | `NewPacketTMSI` |
+| [private-extension](ie/private-extension.go) | `NewPrivateExtension` |
+| [qos-profile](ie/qos-profile.go) | `NewQualityOfServiceProfile` |
+| [rai](ie/rai.go) | `NewRouteingAreaIdentity` |
+| [recovery](ie/recovery.go) | `NewRecovery` |
+| [reordering-required](ie/reordering-required.go) | `NewReorderingRequired` |
+| [selection-mode](ie/selection-mode.go) | `NewSelectionMode` |
+| [tlli](ie/tlli.go) | `NewTemporaryLogicalLinkIdentity` |

@@ -1,372 +1,319 @@
-# gtpv2: GTPv2 in Golang
+# GTPv2-C
 
-Package v2 provides simple and painless handling of GTPv2-C protocol in pure Golang.
+GTPv2-C codecs and `Conn` follow TS 29.274 V20.0.0. `Conn` handles UDP I/O,
+message dispatch, sequence allocation, retransmission and duplicate request
+response replay. Sessions and bearers are in memory; applications implement
+procedure policy and persistence.
 
-## Getting Started
+## Codecs
 
-_Working examples are available in [example](../examples) directory, which might be the better instruction for developers._
-
-### Opening a connection
-
-#### Client
-
-`Dial` opens a connection between the specified peer by confirming the peer is alive by Echo Request/Response exchange. If you don't need Echo, see Server section.
+Import this version's `ie` and `message` subpackages. This complete function is
+[Example_codecs](example_test.go); it builds a message with an IE, marshals it,
+parses a datagram, checks the concrete type and reads the IE with error handling.
 
 ```go
-// Note that the conn is not bound to raddr. to let a Conn to be able to communicate with multiple peers.
-// Interface type is required here to let Conn know which is the local interface type.
-conn, err := gtpv2.Dial(ctx, laddr, raddr, gtpv2.IFTypeS11MMEGTPC, 0)
-if err != nil {
-    // ...
+func Example_codecs() {
+	msg := message.NewEchoResponse(1, ie.NewRecovery(0))
+	wire, err := message.Marshal(msg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	parsed, err := message.Parse(wire)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	echo, ok := parsed.(*message.EchoResponse)
+	if !ok {
+		fmt.Printf("unexpected message %T\n", parsed)
+		return
+	}
+	recovery, err := echo.Recovery.Recovery()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(echo.MessageTypeName(), recovery)
+	// Output: Echo Response 0
 }
 ```
 
-#### Server 
-
-Retrieve `Conn` with `NewConn`, and `ListenAndServe` to start listening.
+IE constructors return an error-carrying `*ie.IE`, not a separate error. Check
+`Err()` and use typed accessors, which return `ie.ErrIENotFound` on nil receivers.
+[ExampleIE_Err](ie/example_test.go) is an executable example:
 
 ```go
-// Interface type is required here to let Conn know which is the local interface type.
-srvConn := gtpv2.NewConn(srvAddr, gtpv2.IFTypeS11MMEGTPC, 0)
-if err := srvConn.ListenAndServe(ctx); err != nil {
-    // ...
+func ExampleIE_Err() {
+	invalid := ie.NewIMSI("1234567890123456")
+	fmt.Println(errors.Is(invalid.Err(), ie.ErrInvalidLength))
+
+	var missing *ie.IE
+	_, err := missing.IMSI()
+	fmt.Println(errors.Is(err, ie.ErrIENotFound))
+
+	valid := ie.NewIMSI("001010123456789")
+	if err := valid.Err(); err != nil {
+		fmt.Println(err)
+		return
+	}
+	imsi, err := valid.IMSI()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(imsi)
+	// Output:
+	// true
+	// true
+	// 001010123456789
 }
 ```
 
-### Handling incoming messages
+See the [root conventions](../README.md#api-conventions) for buffer lifetimes,
+decode error handling and marshaling. Generic codecs preserve framed data; they
+do not implement the procedure rules for unsupported message types.
 
-Prepare functions that comform to [`HandlerFunc`](https://pkg.go.dev/github.com/gomaja-labs/go-gtp/gtpv2#Conn.AddHandler), and register them to `Conn` with `AddHandler`. This should be done as soon as you get `Conn` not to miss the incoming messages.
+## Conn
 
-`HandlerFunc` is to handle the incoming messages by message type. See [example](../examples) for how it is like.  
-Also consider using `AddHandlers` when you have many `HandlerFunc`s.
+`NewConn(localAddr, interfaceType, restartCounter)` creates an unbound server.
+Register `HandlerFunc` callbacks before starting blocking `ListenAndServe(ctx)`.
+Alternatively use `Listen(ctx)` then `Serve(ctx)` to control startup. Handlers
+receive `*gtpv2.Conn`, the peer address and a `message.Message`. Default handlers
+answer Echo Request and process Echo Response and Version Not Supported.
 
-```go
-// write what you expect to do on receiving a message. Handlers should be added per message type.
-// by default, Echo Request/Response and Version Not Supported Indication is handled automatically.
-conn.AddHandler(
-    // first param is the type of message. give number in uint8 or use gtpgtpv2.MsgTypeXXX.
-    messages.MsgTypeCreateSessionResponse,
-    // second param is the HandlerFunc to describe how you handle the message coming from peer.
-    func(c *gtpv2.Conn, senderAddr net.Addr, msg messages.Message) error {
-        // Do what you want with CreateSessionResponse message here.
-        // see examples directly for functional examples
-    },
-)
-```
-
-### Manipulating sessions
-
-With `Conn`, you can create, modify, delete GTPv2-C sessions and bearers with the built-in methods.
-
-#### Session creation
-
-`CreateSession` creates a Session, while storing values given as IEs and creating a default bearer.
-In the following call, for example, IMSI and TEID for S1-U eNB is stored in the created `Session`.
+[ExampleConn](example_test.go) replaces the Echo Request handler.
+`RespondTo` and `EchoResponse` copy the request sequence into the reply:
 
 ```go
-session, err := c.CreateSession(
-    // put IEs required for your implementation here.
-    // it is easier to use constructors in ie package.
-    ie.NewIMSI("123451234567890"),
-    
-    // or, you can use ie.New() to create an IE without type-specific constructor.
-    // put the type of IE, flags/instance, and payload as the parameters.
-    ie.New(ie.ExtendedTraceInformation, 0x00, []byte{0xde, 0xad, 0xbe, 0xef}),
-    
-    // to set the instance to IE created with message-specific constructor, WithInstance()
-    // may be your help.
-    ie.NewIMSI("123451234567890").WithInstance(1), // no one wants to set instance to IMSI, though.
-
-    // don't forget to contain the Sender F-TEID, as it is used to distinguish the incoming
-    // message by Conn.
-    //
-    // to be secure, TEID should be generated with random values, without conflicts in a Conn.
-    // to achieve that, gtpv2 provides NewFTEID() which returns F-TEID in *ie.IE.
-    s11Conn.NewFTEID(gtpv2.IFTypeS11MMEGTPC, mmeIP, ""),
-)
-if err != nil {
-    // ...
+func ExampleConn() {
+	local := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 2123}
+	c := gtpv2.NewConn(local, gtpv2.IFTypeS11S4SGWGTPC, 0)
+	defer func() { _ = c.Close() }()
+	// Echo is handled by default; this shows how to replace a handler.
+	c.AddHandler(message.MsgTypeEchoRequest, func(c *gtpv2.Conn, peer net.Addr, msg message.Message) error {
+		return c.EchoResponse(peer, msg)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := c.ListenAndServe(ctx); err != nil {
+		fmt.Println(err)
+	}
 }
 ```
 
-#### Session deletion / Bearer modification
+`Dial` performs an Echo handshake and starts serving. Its context governs only
+the handshake; `Close` stops the returned connection. Both client and server can
+communicate with several peers through one local UDP endpoint.
+[ExampleDial](example_test.go) connects to the server above:
 
-`DeleteSession` and `ModifyBearer` methods are provided to send each message as easy as possible.
-Unlike `CreateSession`, they don't manipulate the Session information automatically.
+```go
+func ExampleDial() {
+	// Run the server example first. Dial performs an Echo exchange and starts serving.
+	local := &net.UDPAddr{IP: net.ParseIP("127.0.0.1")}
+	peer := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 2123}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, err := gtpv2.Dial(ctx, local, peer, gtpv2.IFTypeS11MMEGTPC, 0)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer func() { _ = c.Close() }()
+	// The handshake context does not govern the returned connection's lifetime.
+	fmt.Println(c.LocalAddr())
+}
+```
 
-### Opening a U-Plane connection
+### Sessions and transactions
 
-_See [v1/README.md](../gtpv1/README.md#opening-a-u-plane-connection)._
+`CreateSession` sends a request and returns a session and sequence; it does not
+wait for success. Supply IEs required by the interface and procedure. Register
+response handlers before sending. A handler can use `GetSessionByTEID` and
+`PassMessageTo` to deliver a response to a session's `WaitMessage(seq, timeout)`
+called from outside the serving goroutine. Check the response type, Cause and
+IE errors before activating the session. Keep peer TEIDs distinct from local
+TEIDs: the connection registry indexes locally allocated receiving TEIDs.
 
-## Supported Features
+On the server, use `NewSession`, populate TEIDs/bearers, `RegisterSession` and
+`RespondTo` after validating the request. `ParseCreateSession` extracts supported
+fields but does not implement all conditional procedure rules. `RemoveSession`
+cleans up local state; sending Delete Session alone does not perform that cleanup.
+This [ExampleSession](example_test.go) illustrates registry operations
+without network I/O or an over-the-wire session establishment:
 
-The following Messages marked with "Yes" are currently available with their own useful constructors.
+```go
+func ExampleSession() {
+	local := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 2123}
+	peer := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 32123}
+	c := gtpv2.NewConn(local, gtpv2.IFTypeS11S4SGWGTPC, 0)
+	defer func() { _ = c.Close() }()
+	session := gtpv2.NewSession(peer, &gtpv2.Subscriber{IMSI: "001010123456789"})
+	session.AddTEID(gtpv2.IFTypeS11S4SGWGTPC, 0x11223344)
+	c.RegisterSession(0x11223344, session)
+	found, err := c.GetSessionByTEID(0x11223344)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if err := found.Activate(); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(found.IMSI, found.IsActive(), c.SessionCount())
+	c.RemoveSession(found)
+	fmt.Println(c.SessionCount())
+	// Output:
+	// 001010123456789 true 1
+	// 0
+}
+```
 
-_Even there are some missing Messages, you can create any kind of Message by using `messages.NewGeneric()`._
+Use `SendMessageTo` for structured initial messages and `RespondTo` for replies.
+`SendRawTo` registers raw requests for response matching; `WriteTo` does not.
+`SetRetransmission` configures retry timing, `SetReplayWindow` configures response
+replay retention and `SetErrorHandler` reports background errors. Validation is
+enabled by default; application handlers still check interface-specific and
+state-dependent requirements and authorize the sender. Handlers run sequentially
+on the serving goroutine; never call `WaitMessage` there.
 
-### Messages
+### Logging
 
-| ID      | Name                                            | Supported |
-|---------|-------------------------------------------------|-----------|
-| 0       | (Spare/Reserved)                                | -         |
-| 1       | Echo Request                                    | Yes       |
-| 2       | Echo Response                                   | Yes       |
-| 3       | Version Not Supported Indication                | Yes       |
-| 4-16    | (Spare/Reserved)                                | -         |
-| 17-24   | (Spare/Reserved)                                | -         |
-| 25-31   | (Spare/Reserved)                                | -         |
-| 32      | Create Session Request                          | Yes       |
-| 33      | Create Session Response                         | Yes       |
-| 34      | Modify Bearer Request                           | Yes       |
-| 35      | Modify Bearer Response                          | Yes       |
-| 36      | Delete Session Request                          | Yes       |
-| 37      | Delete Session Response                         | Yes       |
-| 38      | Change Notification Request                     |           |
-| 39      | Change Notification Response                    |           |
-| 40      | Remote UE Report Notification                   |           |
-| 41      | Remote UE Report Acknowledge                    |           |
-| 42-63   | (Spare/Reserved)                                | -         |
-| 64      | Modify Bearer Command                           | Yes       |
-| 65      | Modify Bearer Failure Indication                | Yes       |
-| 66      | Delete Bearer Command                           | Yes       |
-| 67      | Delete Bearer Failure Indication                | Yes       |
-| 68      | Bearer Resource Command                         |           |
-| 69      | Bearer Resource Failure Indication              |           |
-| 70      | Downlink Data Notification Failure Indication   | Yes       |
-| 71      | Trace Session Activation                        |           |
-| 72      | Trace Session Deactivation                      |           |
-| 73      | Stop Paging Indication                          | Yes       |
-| 74-94   | (Spare/Reserved)                                | -         |
-| 95      | Create Bearer Request                           | Yes       |
-| 96      | Create Bearer Response                          | Yes       |
-| 97      | Update Bearer Request                           | Yes       |
-| 98      | Update Bearer Response                          | Yes       |
-| 99      | Delete Bearer Request                           | Yes       |
-| 100     | Delete Bearer Response                          | Yes       |
-| 101     | Delete PDN Connection Set Request               | Yes       |
-| 102     | Delete PDN Connection Set Response              | Yes       |
-| 103     | PGW Downlink Triggering Notification            |           |
-| 104     | PGW Downlink Triggering Acknowledge             |           |
-| 105-127 | (Spare/Reserved)                                | -         |
-| 128     | Identification Request                          |           |
-| 129     | Identification Response                         |           |
-| 130     | Context Request                                 | Yes       |
-| 131     | Context Response                                | Yes       |
-| 132     | Context Acknowledge                             | Yes       |
-| 133     | Forward Relocation Request                      |           |
-| 134     | Forward Relocation Response                     |           |
-| 135     | Forward Relocation Complete Notification        |           |
-| 136     | Forward Relocation Complete Acknowledge         |           |
-| 137     | Forward Access Context Notification             |           |
-| 138     | Forward Access Context Acknowledge              |           |
-| 139     | Relocation Cancel Request                       |           |
-| 140     | Relocation Cancel Response                      |           |
-| 141     | Configuration Transfer Tunnel                   |           |
-| 142-148 | (Spare/Reserved)                                | -         |
-| 149     | Detach Notification                             | Yes       |
-| 150     | Detach Acknowledge                              | Yes       |
-| 151     | CS Paging Indication                            |           |
-| 152     | RAN Information Relay                           |           |
-| 153     | Alert MME Notification                          |           |
-| 154     | Alert MME Acknowledge                           |           |
-| 155     | UE Activity Notification                        |           |
-| 156     | UE Activity Acknowledge                         |           |
-| 157     | ISR Status Indication                           |           |
-| 158     | UE Registration Query Request                   |           |
-| 159     | UE Registration Query Response                  |           |
-| 160     | Create Forwarding Tunnel Request                |           |
-| 161     | Create Forwarding Tunnel Response               |           |
-| 162     | Suspend Notification                            | Yes       |
-| 163     | Suspend Acknowledge                             | Yes       |
-| 164     | Resume Notification                             | Yes       |
-| 165     | Resume Acknowledge                              | Yes       |
-| 166     | Create Indirect Data Forwarding Tunnel Request  |           |
-| 167     | Create Indirect Data Forwarding Tunnel Response |           |
-| 168     | Delete Indirect Data Forwarding Tunnel Request  |           |
-| 169     | Delete Indirect Data Forwarding Tunnel Response |           |
-| 170     | Release Access Bearers Request                  | Yes       |
-| 171     | Release Access Bearers Response                 | Yes       |
-| 172-175 | (Spare/Reserved)                                | -         |
-| 176     | Downlink Data Notification                      | Yes       |
-| 177     | Downlink Data Notification Acknowledge          | Yes       |
-| 178     | (Spare/Reserved)                                | -         |
-| 179     | PGW Restart Notification                        | Yes       |
-| 180     | PGW Restart Notification Acknowledge            | Yes       |
-| 181-199 | (Spare/Reserved)                                | -         |
-| 200     | Update PDN Connection Set Request               | Yes       |
-| 201     | Update PDN Connection Set Response              | Yes       |
-| 202-210 | (Spare/Reserved)                                | -         |
-| 211     | Modify Access Bearers Request                   | Yes       |
-| 212     | Modify Access Bearers Response                  | Yes       |
-| 213-230 | (Spare/Reserved)                                | -         |
-| 231     | MBMS Session Start Request                      |           |
-| 232     | MBMS Session Start Response                     |           |
-| 233     | MBMS Session Update Request                     |           |
-| 234     | MBMS Session Update Response                    |           |
-| 235     | MBMS Session Stop Request                       |           |
-| 236     | MBMS Session Stop Response                      |           |
-| 237-239 | (Spare/Reserved)                                | -         |
-| 240-247 | (Spare/Reserved)                                | -         |
-| 248-255 | (Spare/Reserved)                                | -         |
+[ExampleSetLogger](example_test.go) configures the package logger:
 
-### Information Elements
+```go
+func ExampleSetLogger() {
+	previous := slog.Default()
+	gtpv2.SetLogger(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+	defer gtpv2.SetLogger(previous)
+	gtpv2.SetLogger(nil)
+	// Output:
+}
+```
 
-The following Information Elements marked with "Yes" are currently available with their own useful constructors.
+## Message support
 
-_Even there are some missing IEs, you can create any kind of IEs by using `ie.New()` function or by initializing ie.IE directly._
+These types have dedicated structs, constructors and parsing dispatch in
+[message/message.go](message/message.go). Other types parse as `message.Generic`;
+`NewGeneric` constructs one. A named type constant alone is not typed support.
 
-| ID      | Name                                                           | Supported |
-|---------|----------------------------------------------------------------|-----------|
-| 0       | (Spare/Reserved)                                               | -         |
-| 1       | International Mobile Subscriber Identity (IMSI)                | Yes       |
-| 2       | Cause                                                          | Yes       |
-| 3       | Recovery (Restart Counter)                                     | Yes       |
-| 4-34    | (Spare/Reserved)                                               | -         |
-| 35-50   | (Spare/Reserved)                                               | -         |
-| 51      | STN-SR                                                         |           |
-| 52-70   | (Spare/Reserved)                                               | -         |
-| 71      | Access Point Name (APN)                                        | Yes       |
-| 72      | Aggregate Maximum Bit Rate (AMBR)                              | Yes       |
-| 73      | EPS Bearer ID (EBI)                                            | Yes       |
-| 74      | IP Address                                                     | Yes       |
-| 75      | Mobile Equipment Identity (MEI)                                | Yes       |
-| 76      | MSISDN                                                         | Yes       |
-| 77      | Indication                                                     | Yes       |
-| 78      | Protocol Configuration Options (PCO)                           | Yes       |
-| 79      | PDN Address Allocation (PAA)                                   | Yes       |
-| 80      | Bearer Level Quality of Service (Bearer QoS)                   | Yes       |
-| 81      | Flow Quality of Service (Flow QoS)                             | Yes       |
-| 82      | RAT Type                                                       | Yes       |
-| 83      | Serving Network                                                | Yes       |
-| 84      | EPS Bearer Level Traffic Flow Template (Bearer TFT)            | Yes       |
-| 85      | Traffic Aggregation Description (TAD)                          |           |
-| 86      | User Location Information (ULI)                                | Yes       |
-| 87      | Fully Qualified Tunnel Endpoint Identifier (F-TEID)            | Yes       |
-| 88      | TMSI                                                           | Yes       |
-| 89      | Global CN-Id                                                   | Yes       |
-| 90      | S103 PDN Data Forwarding Info (S103PDF)                        | Yes       |
-| 91      | S1-U Data Forwarding Info (S1UDF)                              | Yes       |
-| 92      | Delay Value                                                    | Yes       |
-| 93      | Bearer Context                                                 | Yes       |
-| 94      | Charging ID                                                    | Yes       |
-| 95      | Charging Characteristics                                       | Yes       |
-| 96      | Trace Information                                              |           |
-| 97      | Bearer Flags                                                   | Yes       |
-| 98      | (Spare/Reserved)                                               | -         |
-| 99      | PDN Type                                                       | Yes       |
-| 100     | Procedure Transaction ID                                       | Yes       |
-| 101     | (Spare/Reserved)                                               | -         |
-| 102     | (Spare/Reserved)                                               | -         |
-| 103     | MM Context (GSM Key and Triplets)                              |           |
-| 104     | MM Context (UMTS Key, Used Cipher and Quintuplets)             |           |
-| 105     | MM Context (GSM Key, Used Cipher and Quintuplets)              |           |
-| 106     | MM Context (UMTS Key and Quintuplets)                          |           |
-| 107     | MM Context (EPS Security Context, Quadruplets and Quintuplets) |           |
-| 108     | MM Context (UMTS Key, Quadruplets and Quintuplets)             |           |
-| 109     | PDN Connection                                                 |           |
-| 110     | PDU Numbers                                                    |           |
-| 111     | Packet TMSI                                                    | Yes       |
-| 112     | P-TMSI Signature                                               | Yes       |
-| 113     | Hop Counter                                                    | Yes       |
-| 114     | UE Time Zone                                                   | Yes       |
-| 115     | Trace Reference                                                | Yes       |
-| 116     | Complete Request Message                                       |           |
-| 117     | GUTI                                                           | Yes       |
-| 118     | F-Container                                                    |           |
-| 119     | F-Cause                                                        |           |
-| 120     | PLMN ID                                                        | Yes       |
-| 121     | Target Identification                                          |           |
-| 122     | (Spare/Reserved)                                               | -         |
-| 123     | Packet Flow ID                                                 |           |
-| 124     | RAB Context                                                    |           |
-| 125     | Source RNC PDCP Context Info                                   |           |
-| 126     | Port Number                                                    | Yes       |
-| 127     | APN Restriction                                                | Yes       |
-| 128     | Selection Mode                                                 | Yes       |
-| 129     | Source Identification                                          |           |
-| 130     | (Spare/Reserved)                                               | -         |
-| 131     | Change Reporting Action                                        |           |
-| 132     | Fully Qualified PDN Connection Set Identifier (FQ-CSID)        | Yes       |
-| 133     | Channel Needed                                                 |           |
-| 134     | eMLPP Priority                                                 |           |
-| 135     | Node Type                                                      | Yes       |
-| 136     | Fully Qualified Domain Name (FQDN)                             | Yes       |
-| 137     | Transaction Identifier (TI)                                    |           |
-| 138     | MBMS Session Duration                                          |           |
-| 139     | MBMS Service Area                                              |           |
-| 140     | MBMS Session Identifier                                        |           |
-| 141     | MBMS Flow Identifier                                           |           |
-| 142     | MBMS IP Multicast Distribution                                 |           |
-| 143     | MBMS Distribution Acknowledge                                  |           |
-| 144     | RFSP Index                                                     |           |
-| 145     | User CSG Information (UCI)                                     | Yes       |
-| 146     | CSG Information Reporting Action                               |           |
-| 147     | CSG ID                                                         | Yes       |
-| 148     | CSG Membership Indication (CMI)                                | Yes       |
-| 149     | Service Indicator                                              | Yes       |
-| 150     | Detach Type                                                    | Yes       |
-| 151     | Local Distinguished Name (LDN)                                 | Yes       |
-| 152     | Node Features                                                  | Yes       |
-| 153     | MBMS Time to Data Transfer                                     |           |
-| 154     | Throttling                                                     | Yes       |
-| 155     | Allocation/Retention Priority (ARP)                            | Yes       |
-| 156     | EPC Timer                                                      | Yes       |
-| 157     | Signalling Priority Indication                                 |           |
-| 158     | Temporary Mobile Group Identity (TMGI)                         |           |
-| 159     | Additional MM context for SRVCC                                |           |
-| 160     | Additional flags for SRVCC                                     |           |
-| 161     | (Spare/Reserved)                                               | -         |
-| 162     | MDT Configuration                                              |           |
-| 163     | Additional Protocol Configuration Options (APCO)               |           |
-| 164     | Absolute Time of MBMS Data Transfer                            |           |
-| 165     | H(e)NB Information Reporting                                   |           |
-| 166     | IPv4 Configuration Parameters (IP4CP)                          |           |
-| 167     | Change to Report Flags                                         |           |
-| 168     | Action Indication                                              |           |
-| 169     | TWAN Identifier                                                |           |
-| 170     | ULI Timestamp                                                  | Yes       |
-| 171     | MBMS Flags                                                     |           |
-| 172     | RAN/NAS Cause                                                  | Yes       |
-| 173     | CN Operator Selection Entity                                   |           |
-| 174     | Trusted WLAN Mode Indication                                   |           |
-| 175     | Node Number                                                    |           |
-| 176     | Node Identifier                                                |           |
-| 177     | Presence Reporting Area Action                                 |           |
-| 178     | Presence Reporting Area Information                            |           |
-| 179     | TWAN Identifier Timestamp                                      |           |
-| 180     | Overload Control Information                                   |           |
-| 181     | Load Control Information                                       |           |
-| 182     | Metric                                                         |           |
-| 183     | Sequence Number                                                |           |
-| 184     | APN and Relative Capacity                                      |           |
-| 185     | WLAN Offloadability Indication                                 |           |
-| 186     | Paging and Service Information                                 | Yes       |
-| 187     | Integer Number                                                 | Yes       |
-| 188     | Millisecond Time Stamp                                         |           |
-| 189     | Monitoring Event Information                                   |           |
-| 190     | ECGI List                                                      |           |
-| 191     | Remote UE Context                                              |           |
-| 192     | Remote User ID                                                 |           |
-| 193     | Remote UE IP information                                       |           |
-| 194     | CIoT Optimizations Support Indication                          |           |
-| 195     | SCEF PDN Connection                                            |           |
-| 196     | Header Compression Configuration                               |           |
-| 197     | Extended Protocol Configuration Options (ePCO)                 |           |
-| 198     | Serving PLMN Rate Control                                      |           |
-| 199     | Counter                                                        |           |
-| 200     | Mapped UE Usage Type                                           |           |
-| 201     | Secondary RAT Usage Data Report                                |           |
-| 202     | UP Function Selection Indication Flags                         |           |
-| 203     | Maximum Packet Loss Rate                                       |           |
-| 204     | APN Rate Control Status                                        |           |
-| 205     | Extended Trace Information                                     |           |
-| 206     | Monitoring Event Extension Information                         |           |
-| 207     | Additional RRM Policy Index                                    |           |
-| 208     | V2X Context                                                    |           |
-| 209     | PC5 QoS Parameters                                             |           |
-| 210     | Services Authorized                                            |           |
-| 211     | Bit Rate                                                       |           |
-| 212     | PC5 QoS Flow                                                   |           |
-| 213-253 | (Spare/Reserved)                                               | -         |
-| 254     | (Spare/Reserved)                                               | -         |
-| 255     | Private Extension                                              | Yes       |
+| Type | Typed message | Constructor |
+| --- | --- | --- |
+| 1 | [EchoRequest](message/echo-req.go) | `NewEchoRequest` |
+| 2 | [EchoResponse](message/echo-res.go) | `NewEchoResponse` |
+| 3 | [VersionNotSupportedIndication](message/version-not-supported.go) | `NewVersionNotSupportedIndication` |
+| 32 | [CreateSessionRequest](message/create-session-req.go) | `NewCreateSessionRequest` |
+| 33 | [CreateSessionResponse](message/create-session-res.go) | `NewCreateSessionResponse` |
+| 34 | [ModifyBearerRequest](message/modify-bearer-req.go) | `NewModifyBearerRequest` |
+| 35 | [ModifyBearerResponse](message/modify-bearer-res.go) | `NewModifyBearerResponse` |
+| 36 | [DeleteSessionRequest](message/delete-session-req.go) | `NewDeleteSessionRequest` |
+| 37 | [DeleteSessionResponse](message/delete-session-res.go) | `NewDeleteSessionResponse` |
+| 38 | [ChangeNotificationRequest](message/change-notification-req.go) | `NewChangeNotificationRequest` |
+| 39 | [ChangeNotificationResponse](message/change-notification-res.go) | `NewChangeNotificationResponse` |
+| 64 | [ModifyBearerCommand](message/modify-bearer-command.go) | `NewModifyBearerCommand` |
+| 65 | [ModifyBearerFailureIndication](message/modify-bearer-failure-indication.go) | `NewModifyBearerFailureIndication` |
+| 66 | [DeleteBearerCommand](message/delete-bearer-command.go) | `NewDeleteBearerCommand` |
+| 67 | [DeleteBearerFailureIndication](message/delete-bearer-failure-indication.go) | `NewDeleteBearerFailureIndication` |
+| 70 | [DownlinkDataNotificationFailureIndication](message/downlink-data-notification-failure-indication.go) | `NewDownlinkDataNotificationFailureIndication` |
+| 73 | [StopPagingIndication](message/stop-paging-indication.go) | `NewStopPagingIndication` |
+| 95 | [CreateBearerRequest](message/create-bearer-req.go) | `NewCreateBearerRequest` |
+| 96 | [CreateBearerResponse](message/create-bearer-res.go) | `NewCreateBearerResponse` |
+| 97 | [UpdateBearerRequest](message/update-bearer-req.go) | `NewUpdateBearerRequest` |
+| 98 | [UpdateBearerResponse](message/update-bearer-res.go) | `NewUpdateBearerResponse` |
+| 99 | [DeleteBearerRequest](message/delete-bearer-req.go) | `NewDeleteBearerRequest` |
+| 100 | [DeleteBearerResponse](message/delete-bearer-res.go) | `NewDeleteBearerResponse` |
+| 101 | [DeletePDNConnectionSetRequest](message/delete-pdn-connection-set-req.go) | `NewDeletePDNConnectionSetRequest` |
+| 102 | [DeletePDNConnectionSetResponse](message/delete-pdn-connection-set-res.go) | `NewDeletePDNConnectionSetResponse` |
+| 130 | [ContextRequest](message/context-req.go) | `NewContextRequest` |
+| 131 | [ContextResponse](message/context-res.go) | `NewContextResponse` |
+| 132 | [ContextAcknowledge](message/context-ack.go) | `NewContextAcknowledge` |
+| 149 | [DetachNotification](message/detach-notification.go) | `NewDetachNotification` |
+| 150 | [DetachAcknowledge](message/detach-acknowledge.go) | `NewDetachAcknowledge` |
+| 162 | [SuspendNotification](message/suspend-notification.go) | `NewSuspendNotification` |
+| 163 | [SuspendAcknowledge](message/suspend-acknowledge.go) | `NewSuspendAcknowledge` |
+| 164 | [ResumeNotification](message/resume-notification.go) | `NewResumeNotification` |
+| 165 | [ResumeAcknowledge](message/resume-acknowledge.go) | `NewResumeAcknowledge` |
+| 170 | [ReleaseAccessBearersRequest](message/release-access-bearers-req.go) | `NewReleaseAccessBearersRequest` |
+| 171 | [ReleaseAccessBearersResponse](message/release-access-bearers-res.go) | `NewReleaseAccessBearersResponse` |
+| 176 | [DownlinkDataNotification](message/downlink-data-notification.go) | `NewDownlinkDataNotification` |
+| 177 | [DownlinkDataNotificationAcknowledge](message/downlink-data-notification-ack.go) | `NewDownlinkDataNotificationAcknowledge` |
+| 179 | [PGWRestartNotification](message/pgw-restart-notification.go) | `NewPGWRestartNotification` |
+| 180 | [PGWRestartNotificationAcknowledge](message/pgw-restart-notification-acknowledge.go) | `NewPGWRestartNotificationAcknowledge` |
+| 200 | [UpdatePDNConnectionSetRequest](message/update-pdn-connection-set-req.go) | `NewUpdatePDNConnectionSetRequest` |
+| 201 | [UpdatePDNConnectionSetResponse](message/update-pdn-connection-set-res.go) | `NewUpdatePDNConnectionSetResponse` |
+| 211 | [ModifyAccessBearersRequest](message/modify-access-bearers-req.go) | `NewModifyAccessBearersRequest` |
+| 212 | [ModifyAccessBearersResponse](message/modify-access-bearers-res.go) | `NewModifyAccessBearersResponse` |
+
+## IE support
+
+These source files provide typed constructors returning `*ie.IE`; associated
+field structs and accessors are documented in the linked files. Types without
+such helpers can use `ie.New` with raw payloads and the generic scalar helpers
+in [ie/ie.go](ie/ie.go). This table lists helper availability, not complete
+procedure or feature coverage.
+
+| IE family (source) | Typed constructors returning `*IE` |
+| --- | --- |
+| [ambr](ie/ambr.go) | `NewAggregateMaximumBitRate` |
+| [apn-restriction](ie/apn-restriction.go) | `NewAPNRestriction` |
+| [apn](ie/apn.go) | `NewAccessPointName` |
+| [arp](ie/arp.go) | `NewAllocationRetensionPriority` |
+| [bearer-context](ie/bearer-context.go) | `NewBearerContext`, `NewBearerContextWithinCreateBearerRequest`, `NewBearerContextWithinCreateBearerResponse`, `NewBearerContextWithinDeleteBearerRequest`, `NewBearerContextWithinDeleteBearerResponse`, `NewBearerContextWithinModifyBearerCommand`, `NewBearerContextWithinUpdateBearerRequest`, `NewBearerContextWithinUpdateBearerResponse`, `NewBearerContextWithinDeleteBearerCommand`, `NewBearerContextWithinDeleteBearerFailureIndication`, `NewBearerContextWithinCreateIndirectDataForwardingTunnelRequest`, `NewBearerContextWithinCreateIndirectDataForwardingTunnelResponse`, `NewBearerContextWithinForwardRelocationRequest`, `NewBearerContextWithinContextResponse`, `NewBearerContextWithinContextAcknowledge` |
+| [bearer-flags](ie/bearer-flags.go) | `NewBearerFlags` |
+| [bearer-qos](ie/bearer-qos.go) | `NewBearerQoS` |
+| [bearer-tft](ie/bearer-tft.go) | `NewBearerTFT`, `NewBearerTFTCreateNewTFT`, `NewBearerTFTAddPacketFilters`, `NewBearerTFTReplacePacketFilters`, `NewBearerTFTDeletePacketFilters`, `NewBearerTFTDeleteExistingTFT`, `NewBearerTFTNoTFTOperation` |
+| [cause](ie/cause.go) | `NewCause` |
+| [charging-characteristics](ie/charging-characteristics.go) | `NewChargingCharacteristics` |
+| [charging-id](ie/charging-id.go) | `NewChargingID` |
+| [cmi](ie/cmi.go) | `NewCSGMembershipIndication` |
+| [csg-id](ie/csg-id.go) | `NewCSGID` |
+| [delay-value](ie/delay-value.go) | `NewDelayValue`, `NewDelayValueRaw` |
+| [detach-type](ie/detach-type.go) | `NewDetachType` |
+| [ebi](ie/ebi.go) | `NewEPSBearerID` |
+| [epc-timer](ie/epc-timer.go) | `NewEPCTimer`, `NewEPCTimerRaw` |
+| [f-teid](ie/f-teid.go) | `NewFullyQualifiedTEID`, `NewFullyQualifiedTEIDNetIP` |
+| [flow-qos](ie/flow-qos.go) | `NewFlowQoS` |
+| [fq-csid](ie/fq-csid.go) | `NewFullyQualifiedCSID` |
+| [fqdn](ie/fqdn.go) | `NewFullyQualifiedDomainName` |
+| [global-cn-id](ie/global-cn-id.go) | `NewGlobalCNID` |
+| [guti](ie/guti.go) | `NewGUTI` |
+| [hop-counter](ie/hop-counter.go) | `NewHopCounter` |
+| [ie_grouped](ie/ie_grouped.go) | `NewGroupedIE` |
+| [imsi](ie/imsi.go) | `NewIMSI` |
+| [indication](ie/indication.go) | `NewIndication`, `NewIndicationFromBitSequence`, `NewIndicationFromOctets` |
+| [integer-number](ie/integer-number.go) | `NewIntegerNumber` |
+| [ip-addr](ie/ip-addr.go) | `NewIPAddress`, `NewIPAddressNetIP` |
+| [ldn](ie/ldn.go) | `NewLocalDistinguishedName` |
+| [mbms-flags](ie/mbms-flags.go) | `NewMBMSFlags` |
+| [mei](ie/mei.go) | `NewMobileEquipmentIdentity` |
+| [msisdn](ie/msisdn.go) | `NewMSISDN` |
+| [node-features](ie/node-features.go) | `NewNodeFeatures` |
+| [node-type](ie/node-type.go) | `NewNodeType` |
+| [p-tmsi-signature](ie/p-tmsi-signature.go) | `NewPTMSISignature` |
+| [p-tmsi](ie/p-tmsi.go) | `NewPacketTMSI` |
+| [paa](ie/paa.go) | `NewPDNAddressAllocation`, `NewPDNAddressAllocationIPv6`, `NewPDNAddressAllocationDual`, `NewPDNAddressAllocationNetIP`, `NewPDNAddressAllocationDualNetIP` |
+| [paging-and-service-information](ie/paging-and-service-information.go) | `NewPagingAndServiceInformation` |
+| [pco](ie/pco.go) | `NewProtocolConfigurationOptions`, `NewAdditionalProtocolConfigurationOptions`, `NewExtendedProtocolConfigurationOptions`, `NewLargeAdditionalProtocolConfigurationOptions` |
+| [pdn-type](ie/pdn-type.go) | `NewPDNType` |
+| [plmn-id](ie/plmn-id.go) | `NewPLMNID` |
+| [port-number](ie/port-number.go) | `NewPortNumber` |
+| [private-extension](ie/private-extension.go) | `NewPrivateExtension` |
+| [pti](ie/pti.go) | `NewProcedureTransactionID` |
+| [ran-nas-cause](ie/ran-nas-cause.go) | `NewRANNASCause` |
+| [rat-type](ie/rat-type.go) | `NewRATType` |
+| [recovery](ie/recovery.go) | `NewRecovery` |
+| [rfsp-index](ie/rfsp-index.go) | `NewRFSPIndex` |
+| [s103pdf](ie/s103pdf.go) | `NewS103PDNDataForwardingInfo`, `NewS103PDNDataForwardingInfoNetIP` |
+| [s1udf](ie/s1udf.go) | `NewS1UDataForwarding`, `NewS1UDataForwardingNetIP` |
+| [secondary-rat-usage-data-report](ie/secondary-rat-usage-data-report.go) | `NewSecondaryRATUsageDataReport` |
+| [selection-mode](ie/selection-mode.go) | `NewSelectionMode` |
+| [service-indicator](ie/service-indicator.go) | `NewServiceIndicator` |
+| [serving-nw](ie/serving-nw.go) | `NewServingNetwork` |
+| [tad](ie/tad.go) | `NewTrafficAggregateDescription`, `NewTrafficAggregateDescriptionCreateNewTFT`, `NewTrafficAggregateDescriptionAddPacketFilters`, `NewTrafficAggregateDescriptionReplacePacketFilters`, `NewTrafficAggregateDescriptionDeletePacketFilters`, `NewTrafficAggregateDescriptionDeleteExistingTFT`, `NewTrafficAggregateDescriptionNoTFTOperation` |
+| [throttling](ie/throttling.go) | `NewThrottling` |
+| [tmsi](ie/tmsi.go) | `NewTMSI` |
+| [trace-reference](ie/trace-reference.go) | `NewTraceReference` |
+| [uci](ie/uci.go) | `NewUserCSGInformation` |
+| [ue-timezone](ie/ue-timezone.go) | `NewUETimeZone` |
+| [uli-timestamp](ie/uli-timestamp.go) | `NewULITimestamp` |
+| [uli](ie/uli.go) | `NewUserLocationInformation` |

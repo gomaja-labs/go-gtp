@@ -2,20 +2,13 @@
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
-// Package gtp provides simple and painless handling of GTP (GPRS Tunneling Protocol).
+// Package gtp marshals and parses GTPv0, GTPv1 and GTPv2 messages.
+// Parse dispatches by the wire version; version-specific message and ie
+// subpackages provide typed codecs. Parsed values may reference the input
+// buffer, so copy it before parsing when values must survive buffer reuse.
 //
-// This package is the wrapper for all versions of GTP.  Please see the godocs of each version instead.
-//
-// GTPv0: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/gtpv0
-//
-// GTPv1: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/gtpv1
-//
-// GTPv2: https://pkg.go.dev/github.com/gomaja-labs/go-gtp/gtpv2
-//
-// Please also see README.md for detailed usage of the APIs provided by this package,
-// as well as how to run the examples.
-//
-// https://github.com/gomaja-labs/go-gtp/blob/main/README.md
-//
-// https://github.com/gomaja-labs/go-gtp/tree/main/examples/gw-tester
+// Package gtpv1 provides userland and optional Linux kernel GTP-U connections;
+// gtpv2 provides GTPv2-C connections, handlers, transactions and in-memory
+// sessions. GTPv0 and GTPv1-C have codecs only. See the version packages for
+// decode error policy and the README for supported specification editions.
 package gtp

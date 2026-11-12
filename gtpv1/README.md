@@ -1,454 +1,264 @@
-# v1: GTPv1 in Golang
+# GTPv1
 
-Package v1 provides simple and painless handling of GTPv1-C and GTPv1-U protocols in pure Golang.
+GTPv1-C codecs follow TS 29.060 V19.0.0. GTPv1-U codecs and `UPlaneConn` follow
+TS 29.281 V19.2.0; PDU Session Container fields follow TS 38.415 V19.1.0.
+GTPv1-C has codecs only; no control-plane connection or PDP context manager is
+provided.
 
-## Getting Started
+## Codecs
 
-This package is still under construction. The networking feature is only available for GTPv1-U. GTPv1-C feature would be available in the future.  
-See message and ie directory for what you can do with the current implementation. 
-
-### Creating a PDP Context as a client
-
-_NOT IMPLEMENTED YET!_
-
-### Waiting for a PDP Context to be created as a server
-
-_NOT IMPLEMENTED YET!_
-
-### Opening a U-Plane connection
-
-Retrieve `UPlaneConn` first, using `DialUPlane` (for client) or `NewUPlaneConn` (for server). 
-
-#### Client
-
-`DialUPlane` sends Echo Request and returns `UPlaneConn` if it succeeds.
-If you don't need Echo, see Server section. As GTP is UDP-based connection, and there are no session management on `UPlaneConn`, the behavior of `Dial` and `ListenAndServe` is not quite different.
+Import this version's `ie` and `message` subpackages. This complete function is
+[Example_codecs](example_test.go); it builds a message with an IE, marshals it,
+parses a datagram, checks the concrete type and reads the IE with error handling.
 
 ```go
-uConn, err := v1.Dial(ctx, laddr, raddr)
-if err != nil {
-	// ...
-}
-defer uConn.Close()
-```
-
-#### Server
-
-Retrieve `UPlaneConn` with `NewUPlaneConn`, and `ListenAndServe` to start listening.
-
-```go
-uConn := v1.NewUPlaneConn(laddr)
-if err != nil {
-	// ...
-}
-defer uConn.Close()
-
-// This blocks, and returns an error when it's fatal.
-if err := uConn.ListenAndServe(ctx); err != nil {
-	// ...
+func Example_codecs() {
+	msg := message.NewEchoResponse(1, ie.NewRecovery(0))
+	wire, err := message.Marshal(msg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	parsed, err := message.Parse(wire)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	echo, ok := parsed.(*message.EchoResponse)
+	if !ok {
+		fmt.Printf("unexpected message %T\n", parsed)
+		return
+	}
+	recovery, err := echo.Recovery.Recovery()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(echo.MessageTypeName(), recovery)
+	// Output: Echo Response 0
 }
 ```
 
-### Manupulating `UPlaneConn`
-
-With `UPlaneConn`, you can add and delete tunnels, and manipulate device directly.
-
-#### Using Linux Kernel GTP-U
-
-Linux Kernel GTP-U is quite performant and easy to handle, but it requires root privilege, and of course it works only on Linux. So it is disabled by default. To get started, enable it first. Note that it cannot be disabled while the program is working.
+IE constructors return an error-carrying `*ie.IE`, not a separate error. Check
+`Err()` and use typed accessors, which return `ie.ErrIENotFound` on nil receivers.
+[ExampleIE_Err](ie/example_test.go) is an executable example:
 
 ```go
-if err := uConn.EnableKernelGTP("gtp0", v1.roleSGSN); err != nil {
-	// ...
+func ExampleIE_Err() {
+	invalid := ie.NewIMSI("1234567890123456")
+	fmt.Println(errors.Is(invalid.Err(), ie.ErrInvalidLength))
+
+	var missing *ie.IE
+	_, err := missing.IMSI()
+	fmt.Println(errors.Is(err, ie.ErrIENotFound))
+
+	valid := ie.NewIMSI("001010123456789")
+	if err := valid.Err(); err != nil {
+		fmt.Println(err)
+		return
+	}
+	imsi, err := valid.IMSI()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(imsi)
+	// Output:
+	// true
+	// true
+	// 001010123456789
 }
 ```
 
-Then, when the bearer information is ready, use `AddTunnel` or `AddTunnelOverride` to add a tunnel.  
-The latter one deletes the existing tunnel with the same IP and/or incoming TEID before creating a tunnel,
-while the former fails if there's any duplication.
+See the [root conventions](../README.md#api-conventions) for buffer lifetimes,
+decode error handling and marshaling. Generic codecs preserve framed data; they
+do not implement the procedure rules for unsupported message types.
+
+## UPlaneConn
+
+`DialUPlane` binds a UDP socket, performs an Echo handshake and starts serving.
+Its context bounds the handshake; call `Close` to stop the returned connection.
+`NewUPlaneConn` plus blocking `ListenAndServe(ctx)` starts a server without that
+handshake. `NewUPlaneConnFromUDPConn` takes ownership of an already bound socket.
+Register handlers with `AddHandler` before serving; a GTPv1 handler takes
+`gtpv1.Conn`, a peer `net.Addr` and a `message.Message`.
+
+This [send/receive example](example_test.go) needs a peer that answers
+Echo and sends a T-PDU. `ReadFromGTP` returns the decapsulated payload, peer and
+TEID; `WriteToGTP` takes the outgoing TEID, payload and destination. Unknown TEIDs
+normally trigger Error Indication; `DisableErrorIndication` permits application
+reads instead. Set deadlines for bounded reads.
 
 ```go
-// add a tunnel by giving GTP peer's IP, subscriber's IP,
-if err := uConn.AddTunnelOverride(
-	net.ParseIP("10.10.10.10"), // GTP peer's IP
-	net.ParseIP("1.1.1.1"),     // subscriber's IP
-	0x55667788,                 // outgoing TEID
-	0x11223344,                 // incoming TEID
-); err != nil {
-	// ...
+func ExampleUPlaneConn() {
+	// A GTP-U peer must be listening at this address and answer Echo.
+	peer := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 2152}
+	local := &net.UDPAddr{IP: net.ParseIP("127.0.0.1")}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	u, err := gtpv1.DialUPlane(ctx, local, peer)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer func() { _ = u.Close() }()
+
+	// Enable delivery of unknown TEIDs to ReadFromGTP instead of Error Indication.
+	u.DisableErrorIndication()
+	if _, err := u.WriteToGTP(0x11223344, []byte("payload"), peer); err != nil {
+		fmt.Println(err)
+		return
+	}
+	if err := u.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		fmt.Println(err)
+		return
+	}
+	buf := make([]byte, 65535)
+	n, from, teid, err := u.ReadFromGTP(buf)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("peer=%s TEID=%08x payload=%x\n", from, teid, buf[:n])
 }
 ```
 
-When the tunnel is no longer necessary, use `DelTunnelByITEI` or `DelTunnelByMSAddress` to delete it.  
-Or, by `Close`-ing the `UPlaneConn`, all the tunnels associated will the cleared.
+### Relay
+
+`incoming.RelayTo(outgoing, incomingTEID, outgoingTEID, peer)` installs a one-way
+userland forwarding rule. Matching T-PDUs have their TEID replaced and leave
+through `outgoing`; they are not delivered to `ReadFromGTP`. Use `CloseRelay` to
+remove a rule and a separate reverse rule for bidirectional forwarding.
+The [relay example](example_test.go) binds the outgoing socket before
+starting the incoming receive loop:
 
 ```go
-// delete a tunnel by giving an incoming TEID.
-if err := uConn.DelTunnelByITEI(0x11223344); err != nil {
-	// ...
-}
-
-// delete a tunnel by giving an IP address assigned to a subscriber.
-if err := uConn.DelTunnelByMSAddress(net.ParseIP("1.1.1.1")); err != nil {
-	// ...
-}
-```
-
-The packets NOT forwarded by the Kernel can be handled automatically by giving a handler to `UPlaneConn`.  
-Handlers for T-PDU, Echo Request/Response, and Error Indication are registered by default, but you can override them using `AddHandler`.
-
-```go
-uConn.AddHandler(message.MsgTypeEchoRequest, func(c v1.Conn, senderAddr net.Addr, msg message.Message) error {
-	// do anything you want for Echo Request here.
-	// errors returned here are passed to `errCh` that is given to UPlaneConn at the beginning.
-	return nil
-})
-```
-
-If the tunnel with appropriate IP or TEID is not found for a T-PDU packet, Kernel sends it to userland. You can manipulate it with `ReadFromGTP`.
-
-```go
-buf := make([]byte, 1500)
-
-// the 3rd returned value is TEID in GTPv1-U Header.
-n, raddr, teid, err := uConn.ReadFromGTP(buf)
-if err != nil {
-	// ...
-}
-
-fmt.Printf("%x", buf[:n]) // prints only the payload, no GTP header included.
-```
-
-Also, you can send any payload by using `WriteToGTP`. It writes the given payload with GTP header to the specified addr over `UPlaneConn`.
-
-```go
-// first return value is the number of bytes written.
-if _, err := uConn.WriteToGTP(teid, payload, addr); err != nil {
-	// ...
-}
-```
-
-#### Using userland GTP-U
-
-**Note:** _package v1 does provide the encapsulation/decapsulation and some networking features, but it does NOT provide routing of the decapsulated packets, nor capturing IP layer and above on the specified interface. This is because such kind of operations cannot be done without platform-specific codes._
-
-You can use to `ReadFromGTP` read the packets coming into uConn. This does not work for the packets which are handled by `RelayTo`.
-
-```go
-buf := make([]byte, 1500)
-n, raddr, teid, err := uConn.ReadFromGTP(buf)
-if err != nil {
-	// ...
-}
-
-fmt.Printf("%x", buf[:n]) // prints the payload encapsulated in the GTP header.
-```
-
-Also, you can send any payload by using `WriteToGTP`. It writes the given payload with GTP header to the specified addr over `UPlaneConn`.
-
-```go
-// first return value is the number of bytes written.
-if _, err := uConn.WriteToGTP(teid, payload, addr); err != nil {
-	// ...
+func ExampleUPlaneConn_RelayTo() {
+	// Bind sockets before starting the receive loops.
+	inSocket, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 2152})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	in, err := gtpv1.NewUPlaneConnFromUDPConn(inSocket)
+	if err != nil {
+		_ = inSocket.Close()
+		fmt.Println(err)
+		return
+	}
+	defer func() { _ = in.Close() }()
+	outSocket, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	out, err := gtpv1.NewUPlaneConnFromUDPConn(outSocket)
+	if err != nil {
+		_ = outSocket.Close()
+		fmt.Println(err)
+		return
+	}
+	defer func() { _ = out.Close() }()
+	peer := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 32152}
+	if err := in.RelayTo(out, 0x11223344, 0x55667788, peer); err != nil {
+		fmt.Println(err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := in.ListenAndServe(ctx); err != nil {
+		fmt.Println(err)
+	}
 }
 ```
 
-Especially or SGSN/S-GW-ish nodes(=have multiple GTP tunnels and its raison d'être is just to forward traffic right to left/left to right) we provide a method to swap TEID and forward T-PDU packets automatically and efficiently.  
-By using `RelayTo`, the `UPlaneConn` automatically handles the T-PDU packet in background with the least cost. Note that it's performed on the userland and thus it's not so performant.
+### Kernel GTP-U and logging
+
+On Linux, `EnableKernelGTP` enables kernel forwarding with `RoleGGSN` or `RoleSGSN`.
+It needs privileges and a kernel with CONFIG_GTP. Add tunnels with `AddTunnel` or
+`AddTunnelOverride`; remove them with `DelTunnelByITEI` or `DelTunnelByMSAddress`.
+The application configures routes. Kernel mode and userland `RelayTo` cannot be
+combined; kernel mode cannot be disabled on a running connection. There is no
+TUN/TAP integration. Kernel forwarding is not exercised in CI.
+
+Logging uses `log/slog`; see [ExampleSetLogger](example_test.go):
 
 ```go
-// this is the example for S-GW that completed establishing a session and ready to forward U-Plane packets.
-s1uConn.RelayTo(s5uConn, s1usgwTEID, s5uBearer.OutgoingTEID, s5uBearer.RemoteAddress)
-s5uConn.RelayTo(s1uConn, s5usgwTEID, s1uBearer.OutgoingTEID, s1uBearer.RemoteAddress)
-```
-
-### Handling Extension Headers
-
-`AddExtensionHeaders` adds ExtensionHeader(s) to the Header of a Message, set the E flag, and checks if the types given are consistent (error will be returned if not).
-
-```go
-msg := message.NewTPDU(0x11223344, []byte{0xde, 0xad, 0xbe, 0xef})
-if err := msg.AddExtensionHeaders(
-	// We don't support construction of the specific type of an ExtensionHeader.
-	// The second parameter should be the serialized bytes of contents.
-	message.NewExtensionHeader(
-		message.ExtHeaderTypeUDPPort,
-		[]byte{0x22, 0xb8},
-		message.ExtHeaderTypePDUSessionContainer,
-	),
-	message.NewExtensionHeader(
-		message.ExtHeaderTypePDUSessionContainer,
-		[]byte{0x00, 0xc2},
-		message.ExtHeaderTypeNoMoreExtensionHeaders,
-	),
-); err != nil {
-	// ...
+func ExampleSetLogger() {
+	previous := slog.Default()
+	gtpv1.SetLogger(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	defer gtpv1.SetLogger(previous)
+	// Pass nil to disable this package's background logging.
+	gtpv1.SetLogger(nil)
+	// Output:
 }
 ```
 
-ExtensionHeaders decoded or added are stored in `ExtensionHeaders` field in the Header, which can be accessed like this.
+## Message support
 
-```go
-// no need to write msg.Header.ExtensionHeaders, as the Header is embedded in messages.
-for _, eh := range msg.ExtensionHeaders {
-	log.Println(eh.Type)     // ExtensionHeader type has its own Type while it's not actually included in a packet. 
-	log.Println(eh.Content)  // We do not support decoding of each type of content yet. Decode them on your own.
-	log.Println(eh.NextType) // Don't sort the slice - it ruins the packet, or even cause a panic.
-}
-```
+These types have dedicated structs, constructors and parsing dispatch in
+[message/message.go](message/message.go). Other types parse as `message.Generic`;
+`NewGeneric` constructs one. A named type constant alone is not typed support.
 
-When you are directly manipulating a Header for some reason, `WithExtensionHeaders` would help you simplify your operation.
-Be sure not to call it on a Message, as it returns `*Header`, not a `Message` interface.
+| Type | Typed message | Constructor |
+| --- | --- | --- |
+| 1 | [EchoRequest](message/echo-req.go) | `NewEchoRequest` |
+| 2 | [EchoResponse](message/echo-res.go) | `NewEchoResponse` |
+| 3 | [VersionNotSupported](message/version-not-supported.go) | `NewVersionNotSupported` |
+| 16 | [CreatePDPContextRequest](message/create-pdp-context-req.go) | `NewCreatePDPContextRequest` |
+| 17 | [CreatePDPContextResponse](message/create-pdp-context-res.go) | `NewCreatePDPContextResponse` |
+| 18 | [UpdatePDPContextRequest](message/update-pdp-context-req.go) | `NewUpdatePDPContextRequest` |
+| 19 | [UpdatePDPContextResponse](message/update-pdp-context-res.go) | `NewUpdatePDPContextResponse` |
+| 20 | [DeletePDPContextRequest](message/delete-pdp-context-req.go) | `NewDeletePDPContextRequest` |
+| 21 | [DeletePDPContextResponse](message/delete-pdp-context-res.go) | `NewDeletePDPContextResponse` |
+| 26 | [ErrorIndication](message/error-indication.go) | `NewErrorIndication` |
+| 31 | [SupportedExtensionHeaderNotification](message/supported-extension-header-notification.go) | `NewSupportedExtensionHeaderNotification` |
+| 254 | [EndMarker](message/end-marker.go) | `NewEndMarker` |
+| 255 | [TPDU](message/t-pdu.go) | `NewTPDU` |
+| 255 | [TPDU](message/t-pdu.go) | `NewTPDUWithExtentionHeader` |
+| 255 | [TPDU](message/t-pdu.go) | `NewTPDUWithSequence` |
 
-```go
-header := message.NewHeader(
-	0x30, // no need to set E flag here - With... method will do that instead.
-	message.MsgTypeEchoRequest,
-	0xdeadbeef,
-	0x00,
-	[]byte{0xde, 0xad, 0xbe, 0xef},
-).WithExtensionHeaders(
-	message.NewExtensionHeader(
-		message.ExtHeaderTypeUDPPort,
-		[]byte{0x22, 0xb8},
-		message.ExtHeaderTypePDUSessionContainer,
-	),
-	message.NewExtensionHeader(
-		message.ExtHeaderTypePDUSessionContainer,
-		[]byte{0x00, 0xc2},
-		message.ExtHeaderTypeNoMoreExtensionHeaders,
-	),
-)
-```
+## IE support
 
-## Supported Features
+These source files provide typed constructors returning `*ie.IE`; associated
+field structs and accessors are documented in the linked files. Types without
+such helpers can use `ie.New` with raw payloads and the generic scalar helpers
+in [ie/ie.go](ie/ie.go). This table lists helper availability, not complete
+procedure or feature coverage.
 
-### Messages
-
-The following Messages marked with "Yes" are currently available with their own useful constructors.
-
-_Even there are some missing Messages, you can create any kind of Message by using `message.NewGeneric`._
-
-| ID        | Name                                        | Supported |
-|-----------|---------------------------------------------|-----------|
-| 0         | (Spare/Reserved)                            | -         |
-| 1         | Echo Request                                | Yes       |
-| 2         | Echo Response                               | Yes       |
-| 3         | Version Not Supported                       | Yes       |
-| 4         | Node Alive Request                          |           |
-| 5         | Node Alive Response                         |           |
-| 6         | Redirection Request                         |           |
-| 7         | Redirection Response                        |           |
-| 8-15      | (Spare/Reserved)                            | -         |
-| 16        | Create PDP Context Request                  | Yes       |
-| 17        | Create PDP Context Response                 | Yes       |
-| 18        | Update PDP Context Request                  | Yes       |
-| 19        | Update PDP Context Response                 | Yes       |
-| 20        | Delete PDP Context Request                  | Yes       |
-| 21        | Delete PDP Context Response                 | Yes       |
-| 22        | Initiate PDP Context Activation Request     |           |
-| 23        | Initiate PDP Context Activation Response    |           |
-| 24-25     | (Spare/Reserved)                            | -         |
-| 26        | Error Indication                            | Yes       |
-| 27        | PDU Notification Request                    |           |
-| 28        | PDU Notification Response                   |           |
-| 29        | PDU Notification Reject Request             |           |
-| 30        | PDU Notification Reject Response            |           |
-| 31        | Supported Extension Headers Notification    | Yes       |
-| 32        | Send Routeing Information for GPRS Request  |           |
-| 33        | Send Routeing Information for GPRS Response |           |
-| 34        | Failure Report Request                      |           |
-| 35        | Failure Report Response                     |           |
-| 36        | Note MS GPRS Present Request                |           |
-| 37        | Note MS GPRS Present Response               |           |
-| 38-47     | (Spare/Reserved)                            | -         |
-| 48        | Identification Request                      |           |
-| 49        | Identification Response                     |           |
-| 50        | SGSN Context Request                        |           |
-| 51        | SGSN Context Response                       |           |
-| 52        | SGSN Context Acknowledge                    |           |
-| 53        | Forward Relocation Request                  |           |
-| 54        | Forward Relocation Response                 |           |
-| 55        | Forward Relocation Complete                 |           |
-| 56        | Relocation Cancel Request                   |           |
-| 57        | Relocation Cancel Response                  |           |
-| 58        | Forward SRNS Context                        |           |
-| 59        | Forward Relocation Complete Acknowledge     |           |
-| 60        | Forward SRNS Context Acknowledge            |           |
-| 61        | UE Registration Query Request               |           |
-| 62        | UE Registration Query Response              |           |
-| 63-69     | (Spare/Reserved)                            | -         |
-| 70        | RAN Information Relay                       |           |
-| 71-95     | (Spare/Reserved)                            | -         |
-| 96        | MBMS Notification Request                   |           |
-| 97        | MBMS Notification Response                  |           |
-| 98        | MBMS Notification Reject Request            |           |
-| 99        | MBMS Notification Reject Response           |           |
-| 100       | Create MBMS Context Request                 |           |
-| 101       | Create MBMS Context Response                |           |
-| 102       | Update MBMS Context Request                 |           |
-| 103       | Update MBMS Context Response                |           |
-| 104       | Delete MBMS Context Request                 |           |
-| 105       | Delete MBMS Context Response                |           |
-| 106 - 111 | (Spare/Reserved)                            | -         |
-| 112       | MBMS Registration Request                   |           |
-| 113       | MBMS Registration Response                  |           |
-| 114       | MBMS De-Registration Request                |           |
-| 115       | MBMS De-Registration Response               |           |
-| 116       | MBMS Session Start Request                  |           |
-| 117       | MBMS Session Start Response                 |           |
-| 118       | MBMS Session Stop Request                   |           |
-| 119       | MBMS Session Stop Response                  |           |
-| 120       | MBMS Session Update Request                 |           |
-| 121       | MBMS Session Update Response                |           |
-| 122-127   | (Spare/Reserved)                            | -         |
-| 128       | MS Info Change Notification Request         |           |
-| 129       | MS Info Change Notification Response        |           |
-| 130-239   | (Spare/Reserved)                            | -         |
-| 240       | Data Record Transfer Request                |           |
-| 241       | Data Record Transfer Response               |           |
-| 242-253   | (Spare/Reserved)                            | -         |
-| 254       | End Marker                                  |           |
-| 255       | G-PDU                                       | Yes       |
-
-### Information Elements
-
-The following Information Elements marked with "Yes" are currently supported with their own useful constructors.
-
-_Even there are some missing IEs, you can create any kind of IEs by using `ie.New` function or by initializing ie.IE directly._
-
-| ID      | Name                                      | Supported |
-|---------|-------------------------------------------|-----------|
-| 0       | (Spare/Reserved)                          | -         |
-| 1       | Cause                                     | Yes       |
-| 2       | IMSI                                      | Yes       |
-| 3       | Routeing Area Identity                    | Yes       |
-| 4       | Temporary Logical Link Identity           |           |
-| 5       | Packet TMSI                               | Yes       |
-| 6       | (Spare/Reserved)                          | -         |
-| 7       | (Spare/Reserved)                          | -         |
-| 8       | Reordering Required                       | Yes       |
-| 9       | Authentication Triplet                    | Yes       |
-| 10      | (Spare/Reserved)                          | -         |
-| 11      | MAP Cause                                 | Yes       |
-| 12      | P-TMSI Signature                          | Yes       |
-| 13      | MS Validated                              | Yes       |
-| 14      | Recovery                                  | Yes       |
-| 15      | Selection Mode                            | Yes       |
-| 16      | TEID Data I                               | Yes       |
-| 17      | TEID C-Plane                              | Yes       |
-| 18      | TEID Data II                              | Yes       |
-| 19      | Teardown Indication                       | Yes       |
-| 20      | NSAPI                                     | Yes       |
-| 21      | RANAP Cause                               | Yes       |
-| 22      | RAB Context                               |           |
-| 23      | Radio Priority SMS                        |           |
-| 24      | Radio Priority                            |           |
-| 25      | Packet Flow ID                            |           |
-| 26      | Charging Characteristics                  |           |
-| 27      | Trace Reference                           |           |
-| 28      | Trace Type                                |           |
-| 29      | MS Not Reachable Reason                   |           |
-| 30-126  | (Spare/Reserved)                          | -         |
-| 127     | Charging ID                               | Yes       |
-| 128     | End User Address                          | Yes       |
-| 129     | MM Context                                |           |
-| 130     | PDP Context                               |           |
-| 131     | Access Point Name                         | Yes       |
-| 132     | Protocol Configuration Options            | Yes       |
-| 133     | GSN Address                               | Yes       |
-| 134     | MSISDN                                    | Yes       |
-| 135     | QoS Profile                               |           |
-| 136     | Authentication Quintuplet                 | Yes       |
-| 137     | Traffic Flow Template                     |           |
-| 138     | Target Identification                     |           |
-| 139     | UTRAN Transparent Container               |           |
-| 140     | RAB Setup Information                     |           |
-| 141     | Extension Header Type List                | Yes       |
-| 142     | Trigger Id                                |           |
-| 143     | OMC Identity                              |           |
-| 144     | RAN Transparent Container                 |           |
-| 145     | PDP Context Prioritization                |           |
-| 146     | Additional RAB Setup Information          |           |
-| 147     | SGSN Number                               |           |
-| 148     | Common Flags                              | Yes       |
-| 149     | APN Restriction                           | Yes       |
-| 150     | Radio Priority LCS                        |           |
-| 151     | RAT Type                                  | Yes       |
-| 152     | User Location Information                 | Yes       |
-| 153     | MS Time Zone                              | Yes       |
-| 154     | IMEISV                                    | Yes       |
-| 155     | CAMEL Charging Information Container      |           |
-| 156     | MBMS UE Context                           |           |
-| 157     | Temporary Mobile Group Identity           |           |
-| 158     | RIM Routing Address                       |           |
-| 159     | MBMS Protocol Configuration Options       |           |
-| 160     | MBMS Service Area                         |           |
-| 161     | Source RNC PDCP Context Info              |           |
-| 162     | Additional Trace Info                     |           |
-| 163     | Hop Counter                               |           |
-| 164     | Selected PLMN Id                          |           |
-| 165     | MBMS Session Identifier                   |           |
-| 166     | MBMS 2G/3G Indicator                      |           |
-| 167     | Enhanced NSAPI                            |           |
-| 168     | MBMS Session Duration                     |           |
-| 169     | Additional MBMS Trace Info                |           |
-| 170     | MBMS Session Repetition Number            |           |
-| 171     | MBMS Time To Data Transfer                |           |
-| 172     | (Spare/Reserved)                          | -         |
-| 173     | BSS Container                             |           |
-| 174     | Cell Identification                       |           |
-| 175     | PDU Numbers                               |           |
-| 176     | BSS GP Cause                              |           |
-| 177     | Required MBMS Bearer Capabilities         |           |
-| 178     | RIM Routing Address Discriminator         |           |
-| 179     | List of Setup PFCs                        |           |
-| 180     | PS Handover XID Parameters                |           |
-| 181     | MS Info Change Reporting Action           |           |
-| 182     | Direct Tunnel Flags                       |           |
-| 183     | Correlation Id                            |           |
-| 184     | Bearer Control Mode                       |           |
-| 185     | MBMS Flow Identifier                      |           |
-| 186     | MBMS IP Multicast Distribution            |           |
-| 187     | MBMS Distribution Acknowledgement         |           |
-| 188     | Reliable InterRAT Handover Info           |           |
-| 189     | RFSP Index                                |           |
-| 190     | Fully Qualified Domain Name               |           |
-| 191     | Evolved Allocation Retention Priority I   |           |
-| 192     | Evolved Allocation Retention Priority II  |           |
-| 193     | Extended Common Flags                     | Yes       |
-| 194     | User CSG Information                      |           |
-| 195     | CSG Information Reporting Action          |           |
-| 196     | CSG ID                                    |           |
-| 197     | CSG Membership Indication                 |           |
-| 198     | Aggregate Maximum Bit Rate                |           |
-| 199     | UE Network Capability                     |           |
-| 200     | UE-AMBR                                   |           |
-| 201     | APN-AMBR with NSAPI                       |           |
-| 202     | GGSN Back-Off Time                        |           |
-| 203     | Signalling Priority Indication            |           |
-| 204     | Signalling Priority Indication with NSAPI |           |
-| 205     | Higher Bitrates than 16Mbps Flag          |           |
-| 206     | (Spare/Reserved)                          | -         |
-| 207     | Additional MM Context for SRVCC           |           |
-| 208     | Additional Flags for SRVCC                |           |
-| 209     | STN-SR                                    |           |
-| 210     | C-MSISDN                                  |           |
-| 211     | Extended RANAP Cause                      |           |
-| 212     | eNodeB ID                                 |           |
-| 213     | Selection Mode with NSAPI                 |           |
-| 214     | ULI Timestamp                             | Yes       |
-| 215     | LHN Id with NSAPI                         |           |
-| 216     | CN Operator Selection Entity              |           |
-| 217     | UE Usage Type                             |           |
-| 218     | Extended Common Flags II                  | Yes       |
-| 219     | Node Identifier                           |           |
-| 220     | CIoT Optimizations Support Indication     |           |
-| 221     | SCEF PDN Connection                       |           |
-| 222     | IOV Updates Counter                       |           |
-| 223-237 | (Spare/Reserved)                          | -         |
-| 238     | Special IE Type for IE Type Extension     |           |
-| 239-250 | (Spare/Reserved)                          | -         |
-| 251     | Charging Gateway Address                  |           |
-| 252-254 | (Spare/Reserved)                          | -         |
-| 255     | Private Extension                         |           |
+| IE family (source) | Typed constructors returning `*IE` |
+| --- | --- |
+| [apn-restriction](ie/apn-restriction.go) | `NewAPNRestriction` |
+| [apn](ie/apn.go) | `NewAccessPointName` |
+| [authentication-quintuplet](ie/authentication-quintuplet.go) | `NewAuthenticationQuintuplet` |
+| [authentication-triplet](ie/authentication-triplet.go) | `NewAuthenticationTriplet` |
+| [cause](ie/cause.go) | `NewCause` |
+| [charging-id](ie/charging-id.go) | `NewChargingID` |
+| [common-flags](ie/common-flags.go) | `NewCommonFlags` |
+| [end-user-address](ie/end-user-address.go) | `NewEndUserAddress`, `NewEndUserAddressByIP`, `NewEndUserAddressIPv4`, `NewEndUserAddressIPv6`, `NewEndUserAddressPPP` |
+| [extended-common-flags-ii](ie/extended-common-flags-ii.go) | `NewExtendedCommonFlagsII` |
+| [extended-common-flags](ie/extended-common-flags.go) | `NewExtendedCommonFlags` |
+| [extension-header-type-list](ie/extension-header-type-list.go) | `NewExtensionHeaderTypeList` |
+| [gsn-address](ie/gsn-address.go) | `NewGSNAddress`, `NewGSNAddressByIP` |
+| [imei](ie/imei.go) | `NewIMEISV` |
+| [imsi](ie/imsi.go) | `NewIMSI` |
+| [map-cause](ie/map-cause.go) | `NewMAPCause` |
+| [ms-timezone](ie/ms-timezone.go) | `NewMSTimeZone` |
+| [ms-validated](ie/ms-validated.go) | `NewMSValidated` |
+| [msisdn](ie/msisdn.go) | `NewMSISDN` |
+| [nsapi](ie/nsapi.go) | `NewNSAPI` |
+| [p-tmsi-signature](ie/p-tmsi-signature.go) | `NewPTMSISignature` |
+| [p-tmsi](ie/p-tmsi.go) | `NewPacketTMSI` |
+| [pco](ie/pco.go) | `NewProtocolConfigurationOptions` |
+| [private-extension](ie/private-extension.go) | `NewPrivateExtension` |
+| [qos-profile](ie/qos-profile.go) | `NewQoSProfile` |
+| [rai](ie/rai.go) | `NewRouteingAreaIdentity` |
+| [ranap-cause](ie/ranap-cause.go) | `NewRANAPCause` |
+| [rat-type](ie/rat-type.go) | `NewRATType` |
+| [recovery](ie/recovery.go) | `NewRecovery` |
+| [reordering-required](ie/reordering-required.go) | `NewReorderingRequired` |
+| [selection-mode](ie/selection-mode.go) | `NewSelectionMode` |
+| [teardown-ind](ie/teardown-ind.go) | `NewTeardownInd` |
+| [teid](ie/teid.go) | `NewTEIDDataI`, `NewTEIDCPlane`, `NewTEIDDataII` |
+| [uli-timestamp](ie/uli-timestamp.go) | `NewULITimestamp` |
+| [uli](ie/uli.go) | `NewUserLocationInformationWithCGI`, `NewUserLocationInformationWithSAI`, `NewUserLocationInformationWithRAI` |
