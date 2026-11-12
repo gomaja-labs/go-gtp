@@ -33,9 +33,15 @@ type Header struct {
 	// Process this message after the enclosing message (TS 29.274 §7.7.0).
 	Piggybacked Message
 	// PiggybackError reports a secondary-message decode failure. The primary
-	// message remains usable (TS 29.274 §7.7.0); encoders reject this state.
+	// message remains usable (TS 29.274 §7.7.0). Typed encoders reject this
+	// state; Generic retains the secondary bytes for lossless replay.
 	PiggybackError error
 	err            error
+	// Generic decoding retains received spare bits and an undecodable secondary.
+	replay       bool
+	rawFlags     uint8
+	rawSpare     uint8
+	piggybackRaw []byte
 }
 
 // NewHeader creates a new Header. Invalid values are rejected by MarshalTo.
@@ -64,6 +70,9 @@ func (h *Header) headerLen() int {
 }
 
 func (h *Header) piggybackLen() int {
+	if h != nil && len(h.piggybackRaw) != 0 && h.PiggybackError != nil {
+		return len(h.piggybackRaw)
+	}
 	if h == nil || h.Piggybacked == nil {
 		return 0
 	}
@@ -88,7 +97,7 @@ func (h *Header) validate(expected uint8, size int) error {
 	if h == nil {
 		return ErrNilMessage
 	}
-	if h.PiggybackError != nil {
+	if h.PiggybackError != nil && len(h.piggybackRaw) == 0 {
 		return h.PiggybackError
 	}
 	if h.err != nil {
@@ -112,7 +121,7 @@ func (h *Header) validate(expected uint8, size int) error {
 		if p == nil || p == h || p.Piggybacked != nil || !validPiggyback(h.Type, p.Type) {
 			return ErrInvalidPiggyback
 		}
-	} else if h.IsPiggybacking() {
+	} else if h.IsPiggybacking() && (len(h.piggybackRaw) == 0 || h.PiggybackError == nil) {
 		return ErrInvalidPiggyback
 	}
 	if size-h.piggybackLen()-fixedHeaderSize > 0xffff {
@@ -134,7 +143,8 @@ func (h *Header) Marshal() ([]byte, error) {
 }
 
 // MarshalTo writes the whole datagram, returning an error for invalid fields or
-// a short destination. Spare bits are always zero (TS 29.274 §§5.3–5.5.1).
+// a short destination. Spare bits are zero (TS 29.274 §§5.3–5.5.1), except
+// when replaying a header received through ParseGeneric.
 func (h *Header) MarshalTo(b []byte) error {
 	if h == nil {
 		return ErrNilMessage
@@ -153,6 +163,10 @@ func (h *Header) MarshalTo(b []byte) error {
 	if h.Piggybacked != nil {
 		flags |= 0x10
 	}
+	flags |= h.rawFlags
+	if len(h.piggybackRaw) != 0 && h.PiggybackError != nil {
+		flags |= 0x10
+	}
 	b[0], b[1] = flags, h.Type
 	binary.BigEndian.PutUint16(b[2:4], h.Length)
 	offset := fixedHeaderSize
@@ -165,8 +179,13 @@ func (h *Header) MarshalTo(b []byte) error {
 	if h.HasTEID() && h.HasMessagePriority() {
 		b[offset+3] = h.Spare & 0xf0
 	}
+	b[offset+3] |= h.rawSpare
 	end := h.headerLen() + len(h.Payload)
 	copy(b[offset+4:end], h.Payload)
+	if len(h.piggybackRaw) != 0 && h.PiggybackError != nil {
+		copy(b[end:], h.piggybackRaw)
+		return nil
+	}
 	if h.Piggybacked != nil {
 		return h.Piggybacked.MarshalTo(b[end:])
 	}
@@ -186,10 +205,15 @@ func ParseHeader(b []byte) (*Header, error) {
 // LengthError carries the safely decoded transaction fields needed by §7.7.3;
 // UnsupportedVersionError supports the version-specific handling in §7.7.2.
 func (h *Header) UnmarshalBinary(b []byte) error {
+	return h.unmarshalBinary(b, Parse, false)
+}
+
+// TS 29.274 §§5.5.1, 7.7.0: both codecs share framing and secondary errors.
+func (h *Header) unmarshalBinary(b []byte, decode func([]byte) (Message, error), replay bool) error {
 	if h == nil {
 		return ErrNilMessage
 	}
-	*h = Header{}
+	*h = Header{replay: replay}
 	if len(b) < 1 {
 		return ErrTooShortToParse
 	}
@@ -209,6 +233,16 @@ func (h *Header) UnmarshalBinary(b []byte) error {
 	h.SequenceNumber = utils.Uint24To32(b[offset : offset+3])
 	if h.HasTEID() && h.HasMessagePriority() {
 		h.Spare = b[offset+3] & 0xf0
+	}
+	if replay {
+		h.rawFlags = h.Flags & 3
+		if !h.HasTEID() {
+			h.rawFlags |= h.Flags & 4
+		}
+		h.rawSpare = b[offset+3]
+		if h.HasMessagePriority() {
+			h.rawSpare &= 0x0f
+		}
 	}
 	end := int(h.Length) + fixedHeaderSize
 	lengthErr := &LengthError{MessageType: h.Type, TEID: h.TEID, SequenceNumber: h.SequenceNumber, Declared: end, Actual: len(b)}
@@ -235,7 +269,10 @@ func (h *Header) UnmarshalBinary(b []byte) error {
 		if b[end]&0x10 != 0 || !validPiggyback(h.Type, b[end+1]) {
 			h.PiggybackError = ErrInvalidPiggyback
 		} else {
-			h.Piggybacked, h.PiggybackError = Parse(b[end:])
+			h.Piggybacked, h.PiggybackError = decode(b[end:])
+		}
+		if replay && h.PiggybackError != nil {
+			h.piggybackRaw = append([]byte(nil), b[end:]...)
 		}
 	} else if end != len(b) {
 		return lengthErr

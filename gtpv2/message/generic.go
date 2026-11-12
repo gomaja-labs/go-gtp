@@ -10,7 +10,10 @@ import (
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 )
 
-// Generic is a Generic formed GTP Header and its IEs above.
+// Generic holds a header and structurally framed IEs in received order.
+// It does not enforce mandatory presence, IE contents, or IE order.
+// Decoded Generics encode every IE, including appended IEs, with MarshalToLossless.
+// NewGeneric and NewGenericWithoutTEID use normal IE and header encoding checks.
 type Generic struct {
 	*Header
 	IEs []*ie.IE
@@ -80,7 +83,13 @@ func (g *Generic) MarshalTo(b []byte) error {
 		if ie == nil {
 			continue
 		}
-		if err := ie.MarshalTo(g.Header.Payload[offset:]); err != nil {
+		var err error
+		if g.Header.replay {
+			err = ie.MarshalToLossless(g.Header.Payload[offset:])
+		} else {
+			err = ie.MarshalTo(g.Header.Payload[offset:])
+		}
+		if err != nil {
 			return err
 		}
 		offset += ie.MarshalLen()
@@ -106,7 +115,14 @@ func (g *Generic) UnmarshalBinary(b []byte) error {
 	}
 	*g = Generic{}
 	var err error
-	g.Header, err = ParseHeader(b)
+	g.Header = &Header{}
+	err = g.Header.unmarshalBinary(b, func(b []byte) (Message, error) {
+		secondary, err := ParseGeneric(b)
+		if err != nil {
+			return nil, err
+		}
+		return secondary, nil
+	}, true)
 	if err != nil {
 		return err
 	}

@@ -72,7 +72,20 @@ func ExampleIE_Err() {
 
 See the [root conventions](../README.md#api-conventions) for buffer lifetimes,
 decode error handling and marshaling. Generic codecs preserve framed data; they
+check header and IE boundaries and retain IEs in received order without enforcing
+mandatory presence, IE contents or IE order. Decoded Generics re-encode datagrams
+byte for byte, including received header spare and unused fields. Every IE,
+including appended IEs, uses `MarshalToLossless`, which preserves contents and
+spare bits without content validation; construction errors and unencodable
+lengths remain errors. `IE.Err()` and accessors expose content errors. Generics
+built with `NewGeneric` use normal IE and header encoding checks. Generic codecs
 do not implement the procedure rules for unsupported message types.
+`NewGenericWithoutTEID` also uses normal encoding checks. `ParseGeneric` retains
+both messages of a piggybacked datagram as `*message.Generic`, or preserves an
+undecodable secondary for replay. Inspect `PiggybackError` independently; replay
+does not make the secondary valid. `Parse` and `ParseHeader` retain typed
+secondary decoding. Ordinary IE `Marshal`/`MarshalTo` reject malformed grouped
+contents and clear IE header spare bits.
 
 ## Conn
 

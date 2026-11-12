@@ -14,7 +14,9 @@ Decoding checks outer TLIV framing. Invalid grouped contents are retained with
 an error reported by Err and typed accessors, so a message can skip unexpected
 or optional IEs per TS 29.274 §§7.7.1, 7.7.9. ChildIEs contains the decoded list
 when grouping succeeds; Payload always retains the received group bytes.
-Encoding rejects invalid grouped contents, including tolerated received errors.
+Marshal and MarshalTo reject malformed grouped contents and send zero header spares.
+MarshalToLossless replays contents and received header spare bits without content
+validation. Construction errors and unencodable lengths still prevent encoding.
 */
 package ie
 
@@ -189,6 +191,7 @@ const (
 type IE struct {
 	err        error
 	contentErr error
+	wireSpare  uint8
 	Type       uint8
 	Length     uint16
 	instance   uint8
@@ -279,15 +282,26 @@ func (i *IE) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (i *IE) MarshalTo(b []byte) error {
+	return i.marshalTo(b, false)
+}
+
+// MarshalToLossless writes the IE as held without validating contents or clearing
+// spare bits. Construction errors and unencodable lengths still fail.
+func (i *IE) MarshalToLossless(b []byte) error {
+	return i.marshalTo(b, true)
+}
+
+func (i *IE) marshalTo(b []byte, replay bool) error {
 	if len(b) < i.MarshalLen() {
 		return ErrTooShortToMarshal
 	}
-	if err := i.Err(); err != nil {
-		return err
+	if i == nil || i.err != nil {
+		return i.Err()
 	}
-	l := len(b)
-	if l < i.MarshalLen() {
-		return ErrTooShortToMarshal
+	if !replay {
+		if err := i.Err(); err != nil {
+			return err
+		}
 	}
 	if i.MarshalLen()-4 > 0xffff || !i.IsGrouped() && int(i.Length) != i.MarshalLen()-4 {
 		return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
@@ -296,11 +310,19 @@ func (i *IE) MarshalTo(b []byte) error {
 	b[0] = i.Type
 	binary.BigEndian.PutUint16(b[1:3], uint16(i.MarshalLen()-4))
 	b[3] = i.instance & 0x0f
+	if replay {
+		b[3] |= i.wireSpare
+	}
+	// TS 29.274 §§7.7.1, 7.7.9: tolerated received content stays opaque.
+	if i.contentErr != nil {
+		copy(b[4:i.MarshalLen()], i.Payload)
+		return nil
+	}
 	if i.IsGrouped() {
 		offset := 4
 		for _, ie := range i.ChildIEs {
 
-			if err := ie.MarshalTo(b[offset : offset+ie.MarshalLen()]); err != nil {
+			if err := ie.marshalTo(b[offset:offset+ie.MarshalLen()], replay); err != nil {
 				return err
 			}
 			offset += ie.MarshalLen()
@@ -340,6 +362,7 @@ func (i *IE) UnmarshalBinary(b []byte) error {
 
 	// TS 29.274 §8.2.1: only the low four bits encode the instance.
 	i.instance = b[3] & 0x0f
+	i.wireSpare = b[3] & 0xf0
 	i.Payload = b[4 : 4+int(i.Length)]
 
 	if i.IsGrouped() {

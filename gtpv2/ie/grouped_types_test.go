@@ -53,4 +53,16 @@ func TestMalformedPGWChangeInfoDoesNotRejectMessage(t *testing.T) {
 	if !bad.IsGrouped() || !errors.Is(bad.Err(), ie.ErrTooShortToParse) {
 		t.Fatalf("content error: %v", bad.Err())
 	}
+	var reused message.Generic
+	if err := reused.UnmarshalBinary(b); err != nil {
+		t.Fatal(err)
+	}
+	out, err := reused.Marshal()
+	if err != nil || !bytes.Equal(out, b) {
+		t.Fatalf("replay: %x %v", out, err)
+	}
+	good := []byte{0x40, 1, 0, 4, 0, 0, 2, 0}
+	if err := reused.UnmarshalBinary(good); err != nil || len(reused.IEs) != 0 || reused.Piggybacked != nil || reused.PiggybackError != nil {
+		t.Fatalf("reused message: %+v %v", reused, err)
+	}
 }

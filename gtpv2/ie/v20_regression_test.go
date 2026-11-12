@@ -43,6 +43,24 @@ func TestTypeExtensionAccessor(t *testing.T) {
 	}
 }
 
+func TestReceivedMalformedGroupReencodesLosslessly(t *testing.T) {
+	for _, s := range []string{"5d000100ff", "5d0005005d000100ff", "d6000100ff"} {
+		b, _ := hex.DecodeString(s)
+		i, err := ie.Parse(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := make([]byte, i.MarshalLen())
+		err = i.MarshalToLossless(out)
+		if err != nil || !bytes.Equal(b, out) {
+			t.Fatalf("%s: %x, %v", s, out, err)
+		}
+	}
+	if _, err := ie.New(ie.BearerContext, 0, []byte{0xff}).Marshal(); !errors.Is(err, ie.ErrTooShortToParse) {
+		t.Fatalf("construction error lost: %v", err)
+	}
+}
+
 func TestV20AdditionalFlagAccessors(t *testing.T) {
 	for _, tc := range []struct {
 		i      *ie.IE
@@ -114,6 +132,30 @@ func TestGroupedConstructionRejectsMalformedDescendants(t *testing.T) {
 	}
 }
 
+func TestLosslessIEMarshalKeepsReceivedSpares(t *testing.T) {
+	b := []byte{93, 0, 5, 0xf2, 3, 0, 1, 0xe1, 7}
+	i, err := ie.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]byte, i.MarshalLen())
+	if err := i.MarshalToLossless(out); err != nil || !bytes.Equal(out, b) {
+		t.Fatalf("lossless IE: %x %v", out, err)
+	}
+	canonical, err := i.Marshal()
+	if err != nil || canonical[3] != 2 || canonical[7] != 1 {
+		t.Fatalf("ordinary spare encoding: %x %v", canonical, err)
+	}
+	for n := 0; n < i.MarshalLen(); n++ {
+		if err := i.MarshalToLossless(make([]byte, n)); !errors.Is(err, ie.ErrTooShortToMarshal) {
+			t.Fatalf("short lossless IE %d: %v", n, err)
+		}
+	}
+	if err := (*ie.IE)(nil).MarshalToLossless(nil); !errors.Is(err, ie.ErrIENotFound) {
+		t.Fatal(err)
+	}
+}
+
 func TestSRVCCCauseTypeHasName(t *testing.T) {
 	// TS 29.274 Table 8.1-1 explicitly allocates 56, within the Sv range.
 	if ie.SRVCCCause != 56 {
@@ -121,5 +163,31 @@ func TestSRVCCCauseTypeHasName(t *testing.T) {
 	}
 	if name := ie.New(ie.SRVCCCause, 0, nil).Name(); name != "SRVCCCause" {
 		t.Fatalf("type 56 name: %q", name)
+	}
+}
+
+func TestMalformedGroupedContentRequiresLosslessMarshal(t *testing.T) {
+	wire := []byte{93, 0, 1, 0xf2, 255}
+	i, err := ie.Parse(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(i.Err(), ie.ErrTooShortToParse) {
+		t.Fatal(i.Err())
+	}
+	if _, err := i.Marshal(); !errors.Is(err, ie.ErrTooShortToParse) {
+		t.Fatalf("Marshal = %v", err)
+	}
+	if err := i.MarshalTo(make([]byte, i.MarshalLen())); !errors.Is(err, ie.ErrTooShortToParse) {
+		t.Fatalf("MarshalTo = %v", err)
+	}
+	i.Payload[0] = 254
+	out := make([]byte, i.MarshalLen())
+	if err := i.MarshalToLossless(out); err != nil {
+		t.Fatal(err)
+	}
+	wire[4] = 254
+	if !bytes.Equal(out, wire) {
+		t.Fatalf("lossless = %x, want %x", out, wire)
 	}
 }

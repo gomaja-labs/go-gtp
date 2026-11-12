@@ -5,7 +5,11 @@
 package message_test
 
 import (
+	"reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/internal/testutils"
@@ -39,12 +43,28 @@ func TestGeneric(t *testing.T) {
 		},
 	}
 
-	testutils.Run(t, cases, func(b []byte) (testutils.Serializable, error) {
-		v, err := message.ParseGeneric(b)
-		if err != nil {
-			return nil, err
-		}
-		v.Payload = nil
-		return v, nil
-	})
+	for _, tc := range cases {
+		t.Run(tc.Description, func(t *testing.T) {
+			g, err := message.ParseGeneric(tc.Serialized)
+			if err != nil {
+				t.Fatal(err)
+			}
+			g.Payload = nil
+			if diff := cmp.Diff(tc.Structured, g, cmp.Exporter(func(reflect.Type) bool { return true }), cmpopts.IgnoreFields(message.Header{}, "replay")); diff != "" {
+				t.Fatal(diff)
+			}
+			for _, msg := range []testutils.Serializable{tc.Structured, g} {
+				wire, err := msg.Marshal()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if diff := cmp.Diff(tc.Serialized, wire); diff != "" {
+					t.Fatal(diff)
+				}
+				if msg.MarshalLen() != len(tc.Serialized) {
+					t.Fatalf("MarshalLen = %d, want %d", msg.MarshalLen(), len(tc.Serialized))
+				}
+			}
+		})
+	}
 }
