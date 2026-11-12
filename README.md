@@ -126,6 +126,12 @@ The API targets the latest main and does not retain compatibility wrappers.
   `Has<X>` accessor names follow the flag constants, for example `HasPMTSMI`
   pairs with `IndicationPMTSMI`.
 - Use GTPv2 `NewBearerFlags(uhrrei, asi, vInd, vb, ppc)` for all five flags.
+- Generic decoding is structural and replays decoded datagrams byte for byte,
+  using `MarshalToLossless` for every IE, including appended IEs. Generics built
+  with `NewGeneric` use normal encoding checks.
+- GTPv0/GTPv1 `Parse` rejects out-of-sequence IEs with
+  `message.ErrIEOutOfSequence`, also for message types it returns as `Generic`.
+  Use `ParseGeneric` for structural decoding.
 - Update callers of retyped message fields: repeated monitoring, load and
   overload IEs use slices. In bearer responses, use
   `MMESGSNIdentifierOrUELocalIPAddress`; its IP Address instance 0 meaning

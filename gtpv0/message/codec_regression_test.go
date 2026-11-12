@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/gomaja-labs/go-gtp/gtpv0/ie"
 	"testing"
+
+	"github.com/gomaja-labs/go-gtp/gtpv0/ie"
 )
 
 func TestRepeatedMarshal(t *testing.T) {
@@ -90,7 +91,7 @@ func TestRepeatedIEFirstWins(t *testing.T) {
 	}
 }
 func TestIEOrdering(t *testing.T) {
-	b, err := NewGeneric(99, 1, 0, 0, ie.NewRecovery(1), ie.NewCause(193)).Marshal()
+	b, err := NewEchoRequest(1, 0, 0, ie.NewRecovery(1), ie.NewCause(193)).Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}

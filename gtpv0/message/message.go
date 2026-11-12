@@ -5,7 +5,7 @@
 /*
 Package message provides encoding/decoding feature of GTPv0 protocol.
 
-Decoding rejects framing errors. Incorrect optional and unexpected IEs are
+Typed decoding rejects framing errors. Incorrect optional and unexpected IEs are
 retained in their named field or AdditionalIEs; Err and typed accessors report
 content errors. Applications must treat these IEs as absent (TS 29.060
 §§11.1.8, 11.1.11, 11.1.13; GSM 09.60 §§10.1.8, 10.1.11, 10.1.13).
@@ -13,6 +13,21 @@ Incorrect mandatory values return the decoded message and an InvalidIEError,
 so callers can respond with Mandatory IE incorrect. Conditional presence that
 depends on procedure state must be checked by the caller. Encoding validates
 all supplied IEs, including optional and unexpected ones.
+
+Parse rejects descending IE types with ErrIEOutOfSequence and returns no
+message, also for message types it returns as Generic: the order rule applies
+to every message (TS 29.060 §11.1.10; GSM 09.60 §10.1.10). Mandatory presence
+and content errors take priority over ordering (TS 29.060 §11.1; GSM 09.60
+§10.1). Typed encoders sort IEs stably by type (TS 29.060 §7.7.0; GSM 09.60
+§7.9).
+
+ParseGeneric checks only header and IE framing, preserving IE order and all
+received bytes. It performs no mandatory-presence, content, or ordering checks.
+Use it to recover the header and IEs when responding to a decode failure with
+Invalid message format or Mandatory IE missing. A decoded Generic re-encodes
+byte for byte with IE.MarshalToLossless, which skips content checks, so Err and
+accessors still report invalid received contents; IEs that failed construction
+are rejected. A Generic built with NewGeneric is encoded with the normal checks.
 */
 package message
 
@@ -201,6 +216,12 @@ func Parse(b []byte) (Message, error) {
 			return g, err
 		}
 		return nil, fmt.Errorf("failed to Parse Message: %w", err)
+	}
+	// GSM 09.60 §10.1.10: the order rule also covers types decoded as Generic.
+	if generic, ok := g.(*Generic); ok {
+		if err := checkIEOrder(generic.Type, generic.IEs); err != nil {
+			return nil, fmt.Errorf("failed to Parse Message: %w", err)
+		}
 	}
 	return g, nil
 }

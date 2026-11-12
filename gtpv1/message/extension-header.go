@@ -59,7 +59,19 @@ func (e *ExtensionHeader) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (e *ExtensionHeader) MarshalTo(b []byte) error {
-	if err := e.validate(); err != nil {
+	return e.marshalTo(b, false)
+}
+
+func (e *ExtensionHeader) marshalTo(b []byte, preserving bool) error {
+	if e == nil || e.MarshalLen() > 1020 {
+		return ErrInvalidLength
+	}
+	if preserving {
+		// TS 29.281 §5.2.1: replay requires complete four-octet units.
+		if len(e.Content)+2 != e.MarshalLen() {
+			return ErrInvalidLength
+		}
+	} else if err := e.validate(); err != nil {
 		return err
 	}
 	n := e.MarshalLen()
@@ -71,6 +83,9 @@ func (e *ExtensionHeader) MarshalTo(b []byte) error {
 	b[0] = uint8(n / 4)
 	copy(b[1:n-1], e.Content)
 	b[n-1] = e.NextType
+	if preserving {
+		return nil
+	}
 	// TS 29.281 §§5.2.2.2A, 5.2.2.3: type-specific spare bits and octets.
 	switch e.Type {
 	case ExtHeaderTypeLongPDCPPDUNumber, ExtHeaderTypeLongPDCPPDUNumberRequired:

@@ -11,6 +11,8 @@ MarshalLen returns zero for nil IEs and IEs carrying construction errors.
 Nil IEs report ErrIENotFound. Must and Has helpers return zero values on errors.
 Parse and UnmarshalBinary validate individual IE contents; ParseMultiIEs checks
 framing and retains content errors for message-specific handling.
+MarshalToLossless supports structural replay of these received IEs, including
+invalid contents and spare bits; ordinary Marshal/MarshalTo remain strict.
 */
 package ie
 
@@ -201,7 +203,24 @@ func (i *IE) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (i *IE) MarshalTo(b []byte) error {
-	if err := i.Err(); err != nil {
+	return i.marshalTo(b, false)
+}
+
+// MarshalToLossless writes the IE as held without validating contents or clearing
+// spare bits. Construction errors and unencodable lengths still fail.
+func (i *IE) MarshalToLossless(b []byte) error {
+	return i.marshalTo(b, true)
+}
+
+func (i *IE) marshalTo(b []byte, preserving bool) error {
+	if i == nil {
+		return ErrIENotFound
+	}
+	if preserving {
+		if i.err != nil {
+			return i.Err()
+		}
+	} else if err := i.Err(); err != nil {
 		return err
 	}
 	if i.IsTV() {
@@ -209,6 +228,10 @@ func (i *IE) MarshalTo(b []byte) error {
 			return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
 		}
 	} else if len(i.Payload) > 0xffff || int(i.Length) != len(i.Payload) {
+		return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
+	}
+	// TS 29.060 §7.7.40: the type count must fit one octet, also on replay.
+	if i.Type == ExtensionHeaderTypeList && len(i.Payload) > 0xff {
 		return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
 	}
 	if len(b) < i.MarshalLen() {
@@ -226,6 +249,9 @@ func (i *IE) MarshalTo(b []byte) error {
 		offset += 2
 	}
 	copy(b[offset:i.MarshalLen()], i.Payload)
+	if preserving {
+		return nil
+	}
 	// TS 29.060 §§7.7.15, 7.7.17, 7.7.52: spare bits are sent as zero.
 	switch i.Type {
 	case TEIDDataII, NSAPI:

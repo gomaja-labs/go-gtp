@@ -10,11 +10,14 @@ import (
 	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
 )
 
-// Generic is a Generic Header and its IEs above.
-// This is for handling a non-implemented type of message.
+// Generic holds a header and structurally framed IEs in received order.
+// It does not enforce mandatory presence, IE contents, or IE order.
+// Decoded Generics encode every IE, including appended IEs, with MarshalToLossless.
+// NewGeneric uses normal IE and header encoding checks.
 type Generic struct {
 	*Header
-	IEs []*ie.IE
+	IEs            []*ie.IE
+	receivedHeader []byte
 }
 
 // NewGeneric creates a new GTPv1 Generic.
@@ -48,16 +51,13 @@ func (g *Generic) MarshalTo(b []byte) error {
 	}
 	ies := []*ie.IE{}
 	ies = append(ies, g.IEs...)
-	return marshalIEs(g.Header, b, ies)
+	return marshalGenericIEs(g.Header, b, ies, g.receivedHeader)
 }
 
 // ParseGeneric decodes a given byte sequence as a Generic.
 func ParseGeneric(b []byte) (*Generic, error) {
 	g := &Generic{}
 	if err := g.UnmarshalBinary(b); err != nil {
-		if isIEContentError(err) {
-			return g, err
-		}
 		return nil, err
 	}
 	return g, nil
@@ -70,7 +70,8 @@ func (g *Generic) UnmarshalBinary(b []byte) error {
 	}
 	*g = Generic{}
 	var err error
-	g.Header, err = ParseHeader(b)
+	g.Header = &Header{}
+	err = g.Header.unmarshalBinary(b, false)
 	if err != nil {
 		return err
 	}
@@ -79,7 +80,8 @@ func (g *Generic) UnmarshalBinary(b []byte) error {
 	if err != nil {
 		return err
 	}
-	return validateMandatory(g.Header.Type, g.Header.Payload)
+	g.receivedHeader = append([]byte(nil), b[:len(b)-len(g.Header.Payload)]...)
+	return nil
 }
 
 // MarshalLen returns the serial length of Data.
@@ -116,7 +118,7 @@ func (g *Generic) TEID() uint32 {
 	return g.Header.TEID
 }
 
-// AddIE add IEs to Generic type of GTPv2 message and update Length field.
+// AddIE appends IEs and updates Length.
 func (g *Generic) AddIE(ie ...*ie.IE) {
 	g.IEs = append(g.IEs, ie...)
 	g.SetLength()

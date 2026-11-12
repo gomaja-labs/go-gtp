@@ -5,8 +5,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
 	"testing"
+
+	"github.com/gomaja-labs/go-gtp/gtpv1/ie"
 )
 
 func testNoPanic(t *testing.T, f func()) {
@@ -170,7 +171,7 @@ func TestRepeatedIEFirstWins(t *testing.T) {
 	}
 }
 func TestIEOrdering(t *testing.T) {
-	b, err := NewGeneric(99, 0, 1, ie.NewRecovery(1), ie.NewCause(193)).Marshal()
+	b, err := NewEchoRequest(1, ie.NewRecovery(1), ie.NewCause(193)).Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}

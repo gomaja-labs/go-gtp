@@ -55,6 +55,11 @@ func (h *Header) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (h *Header) MarshalTo(b []byte) error {
+	return h.marshalTo(b, nil)
+}
+
+// marshalTo preserves received spare and unused fields only for Generic replay.
+func (h *Header) marshalTo(b, received []byte) error {
 	if h == nil || len(h.Payload) > 65535 {
 		return ErrInvalidLength
 	}
@@ -66,11 +71,17 @@ func (h *Header) MarshalTo(b []byte) error {
 	}
 
 	b[0] = h.Flags | 0x0e
+	if received != nil {
+		b[0] = h.Flags
+	}
 	b[1] = h.Type
 	binary.BigEndian.PutUint16(b[2:4], uint16(len(h.Payload)))
 	binary.BigEndian.PutUint16(b[4:6], h.SequenceNumber)
 	binary.BigEndian.PutUint16(b[6:8], h.FlowLabel)
 	binary.BigEndian.PutUint32(b[8:12], uint32(int(h.SndcpNumber)<<24|0xffffff))
+	if len(received) >= 20 {
+		copy(b[9:12], received[9:12])
+	}
 	binary.BigEndian.PutUint64(b[12:20], h.TID)
 	// two bytes of padding before payload.
 	copy(b[20:h.MarshalLen()], h.Payload)

@@ -11,6 +11,8 @@ MarshalLen returns zero for nil IEs and IEs carrying construction errors.
 Nil IEs report ErrIENotFound. Must and Has helpers return zero values on errors.
 Parse and UnmarshalBinary validate individual IE contents; ParseMultiIEs checks
 framing and retains content errors for message-specific handling.
+MarshalToLossless supports structural replay of these received IEs, including
+invalid contents and spare bits; ordinary Marshal/MarshalTo remain strict.
 */
 package ie
 
@@ -102,7 +104,24 @@ func (i *IE) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (i *IE) MarshalTo(b []byte) error {
-	if err := i.Err(); err != nil {
+	return i.marshalTo(b, false)
+}
+
+// MarshalToLossless writes the IE as held without validating contents or clearing
+// spare bits. Construction errors and unencodable lengths still fail.
+func (i *IE) MarshalToLossless(b []byte) error {
+	return i.marshalTo(b, true)
+}
+
+func (i *IE) marshalTo(b []byte, preserving bool) error {
+	if i == nil {
+		return ErrIENotFound
+	}
+	if preserving {
+		if i.err != nil {
+			return i.Err()
+		}
+	} else if err := i.Err(); err != nil {
 		return err
 	}
 	if i.IsTV() {

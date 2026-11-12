@@ -70,6 +70,11 @@ func (h *Header) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (h *Header) MarshalTo(b []byte) error {
+	return h.marshalTo(b, nil)
+}
+
+// marshalTo preserves received spare and unused fields only for Generic replay.
+func (h *Header) marshalTo(b, received []byte) error {
 	if h == nil {
 		return ErrInvalidLength
 	}
@@ -83,7 +88,7 @@ func (h *Header) MarshalTo(b []byte) error {
 	if h.MarshalLen()-8 > 65535 {
 		return ErrInvalidLength
 	}
-	if err := h.validateChain(); err != nil {
+	if err := h.validateChain(received); err != nil {
 		return err
 	}
 	n := h.MarshalLen()
@@ -92,12 +97,18 @@ func (h *Header) MarshalTo(b []byte) error {
 	}
 	clear(b[:n])
 	b[0] = h.Flags & 0xf7
+	if received != nil {
+		b[0] = h.Flags
+	}
 	b[1] = h.Type
 	binary.BigEndian.PutUint16(b[2:4], uint16(n-8))
 	binary.BigEndian.PutUint32(b[4:8], h.TEID)
 	off := 8
 	// TS 29.281 §5.1: any E/S/PN flag includes all four optional octets; unused fields are zero.
 	if h.Flags&7 != 0 {
+		if len(received) >= 12 {
+			copy(b[8:12], received[8:12])
+		}
 		if h.HasSequence() {
 			binary.BigEndian.PutUint16(b[off:off+2], h.SequenceNumber)
 		}
@@ -111,7 +122,7 @@ func (h *Header) MarshalTo(b []byte) error {
 	}
 	if h.HasExtensionHeader() {
 		for _, eh := range h.ExtensionHeaders {
-			if err := eh.MarshalTo(b[off:]); err != nil {
+			if err := eh.marshalTo(b[off:], received != nil); err != nil {
 				return err
 			}
 			off += eh.MarshalLen()
@@ -132,6 +143,10 @@ func ParseHeader(b []byte) (*Header, error) {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in GTPv1 header.
 func (h *Header) UnmarshalBinary(b []byte) error {
+	return h.unmarshalBinary(b, true)
+}
+
+func (h *Header) unmarshalBinary(b []byte, contents bool) error {
 	if h == nil {
 		return ErrInvalidLength
 	}
@@ -177,8 +192,10 @@ func (h *Header) UnmarshalBinary(b []byte) error {
 		if err := eh.UnmarshalBinary(b[off:end]); err != nil {
 			return err
 		}
-		if err := eh.validateReceived(); err != nil {
-			return err
+		if contents {
+			if err := eh.validateReceived(); err != nil {
+				return err
+			}
 		}
 		h.ExtensionHeaders = append(h.ExtensionHeaders, eh)
 		off += eh.MarshalLen()
@@ -367,7 +384,7 @@ func (h *Header) AddExtensionHeaders(extHdrs ...*ExtensionHeader) error {
 			return ErrInvalidLength
 		}
 	}
-	if err := h.validateChain(); err != nil {
+	if err := h.validateChain(nil); err != nil {
 		return err
 	}
 	combined := append([]*ExtensionHeader(nil), h.ExtensionHeaders...)
@@ -384,7 +401,7 @@ func (h *Header) AddExtensionHeaders(extHdrs ...*ExtensionHeader) error {
 	return nil
 }
 
-func (h *Header) validateChain() error {
+func (h *Header) validateChain(received []byte) error {
 	next := h.NextExtensionHeaderType
 	if !h.HasExtensionHeader() {
 		if len(h.ExtensionHeaders) > 0 {
@@ -396,8 +413,16 @@ func (h *Header) validateChain() error {
 		if eh == nil || eh.Type == 0 || eh.Type != next {
 			return ErrInvalidLength
 		}
-		if err := eh.validate(); err != nil {
-			return err
+		if eh.MarshalLen() > 1020 {
+			return ErrInvalidLength
+		}
+		if received == nil {
+			if err := eh.validate(); err != nil {
+				return err
+			}
+		}
+		if received != nil && len(eh.Content)+2 != eh.MarshalLen() {
+			return ErrInvalidLength
 		}
 		next = eh.NextType
 	}

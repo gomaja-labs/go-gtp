@@ -2,6 +2,7 @@ package message_test
 
 import (
 	"bytes"
+	"encoding/hex"
 	"testing"
 
 	"github.com/gomaja-labs/go-gtp/gtpv1/message"
@@ -30,6 +31,33 @@ func FuzzRoundTrip(f *testing.F) {
 		}
 		if !bytes.Equal(out, out2) {
 			t.Fatalf("unstable encoding\nin:   % x\nout1: % x\nout2: % x", b, out, out2)
+		}
+	})
+}
+
+// FuzzGenericRoundTrip requires exact replay of every structurally accepted frame.
+func FuzzGenericRoundTrip(f *testing.F) {
+	for _, tc := range genericStructuralCases {
+		b, err := hex.DecodeString(tc.wire)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(b)
+	}
+	f.Fuzz(func(t *testing.T, b []byte) {
+		g, err := message.ParseGeneric(b)
+		if err != nil {
+			return
+		}
+		out, err := g.Marshal()
+		if err != nil {
+			t.Fatalf("Marshal accepted input: %v; in %x", err, b)
+		}
+		if !bytes.Equal(out, b) {
+			t.Fatalf("changed frame: in %x; out %x", b, out)
+		}
+		if g.MarshalLen() != len(out) {
+			t.Fatalf("MarshalLen %d; wrote %d", g.MarshalLen(), len(out))
 		}
 	})
 }

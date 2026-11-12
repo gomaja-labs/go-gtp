@@ -59,6 +59,41 @@ func marshalIEs(h *Header, b []byte, ies []*ie.IE) error {
 	return copyHeader.MarshalTo(b)
 }
 
+// marshalGenericIEs is structural: preserve order and received invalid contents.
+func marshalGenericIEs(h *Header, b []byte, ies []*ie.IE, received []byte) error {
+	n := messageLen(h, ies)
+	if h == nil || n-20 > 65535 {
+		return ErrInvalidLength
+	}
+	if len(b) < n {
+		return ErrTooShortToMarshal
+	}
+	p := make([]byte, n-(h.MarshalLen()-len(h.Payload)))
+	off := 0
+	for _, i := range ies {
+		if i == nil {
+			continue
+		}
+		var err error
+		if received == nil {
+			err = i.MarshalTo(p[off:])
+		} else {
+			err = i.MarshalToLossless(p[off:])
+		}
+		if err != nil {
+			return err
+		}
+		off += i.MarshalLen()
+	}
+	copyHeader := *h
+	copyHeader.Payload = p
+	copyHeader.SetLength()
+	return copyHeader.marshalTo(b, received)
+}
+
+// ErrIEOutOfSequence identifies descending IE types in a typed message.
+var ErrIEOutOfSequence = errors.New("IE out of sequence")
+
 // ErrMissingIE identifies a message without a mandatory information element.
 var ErrMissingIE = errors.New("missing mandatory IE")
 
@@ -91,17 +126,12 @@ func validateMandatory(typ uint8, p []byte) error {
 	for _, i := range ies {
 		values[i.Type] = append(values[i.Type], i)
 	}
+	var mandatory []*ie.IE
 	require := func(t uint8, n int) error {
 		if len(values[t]) < n {
 			return fmt.Errorf("message %d IE %d: %w", typ, t, ErrMissingIE)
 		}
-		// TS 29.060 §11.1.7; GSM 09.60 §10.1.7: incorrect mandatory
-		// values require a Cause response, while optional errors do not.
-		for occurrence, i := range values[t][:n] {
-			if err := i.Err(); err != nil {
-				return &InvalidIEError{Type: t, Occurrence: occurrence, Err: err}
-			}
-		}
+		mandatory = append(mandatory, values[t][:n]...)
 		return nil
 	}
 	var needed []uint8
@@ -126,6 +156,29 @@ func validateMandatory(typ uint8, p []byte) error {
 	for _, t := range needed {
 		if err := require(t, 1); err != nil {
 			return err
+		}
+	}
+	// TS 29.060 §§11.1, 11.1.5–11.1.7; GSM 09.60 §§10.1, 10.1.5–10.1.7:
+	// complete all presence checks before checking mandatory contents.
+	occurrences := map[uint8]int{}
+	for _, i := range mandatory {
+		occurrence := occurrences[i.Type]
+		occurrences[i.Type]++
+		if err := i.Err(); err != nil {
+			return &InvalidIEError{Type: i.Type, Occurrence: occurrence, Err: err}
+		}
+	}
+	// TS 29.060 §11.1; GSM 09.60 §10.1: missing/incorrect mandatory
+	// IEs take priority over ordering (§11.1.10 / §10.1.10).
+	return checkIEOrder(typ, ies)
+}
+
+// checkIEOrder reports IEs that are not in ascending type order (TS 29.060
+// §§7.7.0, 11.1.10; GSM 09.60 §§7.9, 10.1.10). Repetitions of a type are in order.
+func checkIEOrder(typ uint8, ies []*ie.IE) error {
+	for j := 1; j < len(ies); j++ {
+		if ies[j].Type < ies[j-1].Type {
+			return fmt.Errorf("message %d IE %d after IE %d: %w", typ, ies[j].Type, ies[j-1].Type, ErrIEOutOfSequence)
 		}
 	}
 	return nil
