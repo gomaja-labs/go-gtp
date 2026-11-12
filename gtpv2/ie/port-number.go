@@ -11,6 +11,9 @@ func NewPortNumber(port uint16) *IE {
 
 // PortNumber returns PortNumber in uint16 if the type of IE matches.
 func (i *IE) PortNumber() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case PortNumber:
 		return i.ValueAsUint16()
@@ -22,6 +25,9 @@ func (i *IE) PortNumber() (uint16, error) {
 // MustPortNumber returns PortNumber in uint16, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustPortNumber() uint16 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.PortNumber()
 	return v
 }

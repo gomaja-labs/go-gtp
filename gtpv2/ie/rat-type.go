@@ -6,14 +6,28 @@ package ie
 
 // NewRATType creates a new RATType IE.
 func NewRATType(rat uint8) *IE {
+	// TS 29.274 §8.17: validate the transmitted value.
+	if rat < 1 || rat > 22 {
+		return newErrorIE(RATType, ErrMalformed)
+	}
 	return NewUint8IE(RATType, rat)
 }
 
 // RATType returns RATType in uint8 if the type of IE matches.
 func (i *IE) RATType() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case RATType:
-		return i.ValueAsUint8()
+		v, err := i.ValueAsUint8()
+		if err != nil {
+			return 0, err
+		}
+		if v < 1 || v > 22 {
+			return 0, ErrMalformed
+		}
+		return v, nil
 	default:
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -22,6 +36,9 @@ func (i *IE) RATType() (uint8, error) {
 // MustRATType returns RATType in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustRATType() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.RATType()
 	return v
 }

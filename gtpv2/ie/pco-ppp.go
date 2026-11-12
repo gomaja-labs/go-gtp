@@ -19,6 +19,7 @@ const (
 //
 // TODO: create another package with full implementation.
 type PCOPPP struct {
+	err        error
 	Code       uint8
 	Identifier uint8
 	Length     uint16
@@ -39,7 +40,7 @@ func NewPCOPPP(code, id uint8, payload []byte) *PCOPPP {
 func NewPCOPPPWithPAP(code, id uint8, peer, pass string) *PCOPPP {
 	pap, err := NewPAPFields(peer, pass).Marshal()
 	if err != nil {
-		return nil
+		return &PCOPPP{err: err}
 	}
 
 	return NewPCOPPP(code, id, pap)
@@ -49,7 +50,7 @@ func NewPCOPPPWithPAP(code, id uint8, peer, pass string) *PCOPPP {
 func NewPCOPPPWithCHAP(code, id uint8, val []byte, pass string) *PCOPPP {
 	pap, err := NewCHAPFields(val, pass).Marshal()
 	if err != nil {
-		return nil
+		return &PCOPPP{err: err}
 	}
 
 	return NewPCOPPP(code, id, pap)
@@ -63,7 +64,7 @@ func NewPCOPPPWithIPCPOptions(code, id uint8, opts ...*IPCPOption) *PCOPPP {
 		l := o.MarshalLen()
 		b = append(b, make([]byte, l)...)
 		if err := o.MarshalTo(b[offset : offset+l]); err != nil {
-			return nil
+			return &PCOPPP{err: err}
 		}
 
 		offset += l
@@ -74,6 +75,9 @@ func NewPCOPPPWithIPCPOptions(code, id uint8, opts ...*IPCPOption) *PCOPPP {
 
 // Marshal serializes PCOPPP.
 func (p *PCOPPP) Marshal() ([]byte, error) {
+	if p == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, p.MarshalLen())
 	if err := p.MarshalTo(b); err != nil {
 		return nil, err
@@ -84,7 +88,19 @@ func (p *PCOPPP) Marshal() ([]byte, error) {
 
 // MarshalTo serializes PCOPPP.
 func (p *PCOPPP) MarshalTo(b []byte) error {
-	if len(b) < 5 {
+	if p == nil {
+		return ErrIENotFound
+	}
+	if p.err != nil {
+		return p.err
+	}
+	if len(p.Payload) > 65531 || int(p.Length) != p.MarshalLen() {
+		return ErrInvalidLength
+	}
+	if len(b) < p.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	if len(b) < 4 {
 		return io.ErrUnexpectedEOF
 	}
 	b[0] = p.Code
@@ -108,8 +124,12 @@ func ParsePCOPPP(b []byte) (*PCOPPP, error) {
 
 // UnmarshalBinary decodes given bytes into PCOPPP.
 func (p *PCOPPP) UnmarshalBinary(b []byte) error {
+	if p == nil {
+		return ErrIENotFound
+	}
+	*p = PCOPPP{}
 	l := len(b)
-	if l < 5 {
+	if l < 4 {
 		return ErrTooShortToParse
 	}
 
@@ -117,7 +137,7 @@ func (p *PCOPPP) UnmarshalBinary(b []byte) error {
 	p.Identifier = b[1]
 	p.Length = binary.BigEndian.Uint16(b[2:4])
 
-	if l < int(p.Length) {
+	if p.Length < 4 || l < int(p.Length) {
 		return io.ErrUnexpectedEOF
 	}
 	p.Payload = b[4:int(p.Length)]
@@ -127,6 +147,9 @@ func (p *PCOPPP) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of PCOPPP in int.
 func (p *PCOPPP) MarshalLen() int {
+	if p == nil {
+		return 0
+	}
 	return 4 + len(p.Payload)
 }
 
@@ -152,6 +175,9 @@ func NewPAPFields(id, pass string) *PAPFields {
 
 // Marshal serializes PAPFields.
 func (p *PAPFields) Marshal() ([]byte, error) {
+	if p == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, p.MarshalLen())
 	if err := p.MarshalTo(b); err != nil {
 		return nil, err
@@ -162,6 +188,15 @@ func (p *PAPFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes PAPFields.
 func (p *PAPFields) MarshalTo(b []byte) error {
+	if p == nil {
+		return ErrIENotFound
+	}
+	if len(p.PeerID) > 255 || len(p.Password) > 255 || int(p.PeerIDLength) != len(p.PeerID) || int(p.PasswordLength) != len(p.Password) {
+		return ErrInvalidLength
+	}
+	if len(b) < p.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
@@ -169,7 +204,7 @@ func (p *PAPFields) MarshalTo(b []byte) error {
 	b[0] = p.PeerIDLength
 	offset := 1
 
-	if l < offset+int(p.PeerIDLength) {
+	if l < offset+int(p.PeerIDLength)+1 {
 		return io.ErrUnexpectedEOF
 	}
 	copy(b[offset:offset+int(p.PeerIDLength)], p.PeerID)
@@ -198,6 +233,10 @@ func ParsePAPFields(b []byte) (*PAPFields, error) {
 
 // UnmarshalBinary decodes given bytes into PAPFields.
 func (p *PAPFields) UnmarshalBinary(b []byte) error {
+	if p == nil {
+		return ErrIENotFound
+	}
+	*p = PAPFields{}
 	l := len(b)
 	if l < 2 {
 		return ErrTooShortToParse
@@ -206,7 +245,7 @@ func (p *PAPFields) UnmarshalBinary(b []byte) error {
 	p.PeerIDLength = b[0]
 	offset := 1
 
-	if l < offset+int(p.PeerIDLength) {
+	if l < offset+int(p.PeerIDLength)+1 {
 		return io.ErrUnexpectedEOF
 	}
 	p.PeerID = string(b[offset : offset+int(p.PeerIDLength)])
@@ -225,6 +264,9 @@ func (p *PAPFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of PAPFields in int.
 func (p *PAPFields) MarshalLen() int {
+	if p == nil {
+		return 0
+	}
 	return 2 + len([]byte(p.PeerID)) + len([]byte(p.Password))
 }
 
@@ -248,6 +290,9 @@ func NewCHAPFields(val []byte, name string) *CHAPFields {
 
 // Marshal serializes CHAPFields.
 func (c *CHAPFields) Marshal() ([]byte, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, c.MarshalLen())
 	if err := c.MarshalTo(b); err != nil {
 		return nil, err
@@ -258,6 +303,15 @@ func (c *CHAPFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes CHAPFields.
 func (c *CHAPFields) MarshalTo(b []byte) error {
+	if c == nil {
+		return ErrIENotFound
+	}
+	if len(c.Value) > 255 || int(c.ValueSize) != len(c.Value) {
+		return ErrInvalidLength
+	}
+	if len(b) < c.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
@@ -288,6 +342,10 @@ func ParseCHAPFields(b []byte) (*CHAPFields, error) {
 
 // UnmarshalBinary decodes given bytes into CHAPFields.
 func (c *CHAPFields) UnmarshalBinary(b []byte) error {
+	if c == nil {
+		return ErrIENotFound
+	}
+	*c = CHAPFields{}
 	l := len(b)
 	if l < 2 {
 		return ErrTooShortToParse
@@ -309,6 +367,9 @@ func (c *CHAPFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of CHAPFields in int.
 func (c *CHAPFields) MarshalLen() int {
+	if c == nil {
+		return 0
+	}
 	return 1 + len(c.Value) + len([]byte(c.Name))
 }
 
@@ -392,6 +453,9 @@ func NewIPCPOptionSecondaryDNS(ip net.IP) *IPCPOption {
 
 // Marshal serializes IPCPOption.
 func (o *IPCPOption) Marshal() ([]byte, error) {
+	if o == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, o.MarshalLen())
 	if err := o.MarshalTo(b); err != nil {
 		return nil, err
@@ -402,7 +466,16 @@ func (o *IPCPOption) Marshal() ([]byte, error) {
 
 // MarshalTo serializes IPCPOption.
 func (o *IPCPOption) MarshalTo(b []byte) error {
-	if len(b) < 3 {
+	if o == nil {
+		return ErrIENotFound
+	}
+	if len(o.Payload) > 253 || int(o.Length) != o.MarshalLen() {
+		return ErrInvalidLength
+	}
+	if len(b) < o.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	if len(b) < 2 {
 		return io.ErrUnexpectedEOF
 	}
 	b[0] = o.Type
@@ -425,15 +498,19 @@ func ParseIPCPOption(b []byte) (*IPCPOption, error) {
 
 // UnmarshalBinary decodes given bytes into IPCPOption.
 func (o *IPCPOption) UnmarshalBinary(b []byte) error {
+	if o == nil {
+		return ErrIENotFound
+	}
+	*o = IPCPOption{}
 	l := len(b)
-	if l < 3 {
+	if l < 2 {
 		return ErrTooShortToParse
 	}
 
 	o.Type = b[0]
 	o.Length = b[1]
 
-	if l < int(o.Length) {
+	if o.Length < 2 || l < int(o.Length) {
 		return io.ErrUnexpectedEOF
 	}
 	o.Payload = b[2:int(o.Length)]
@@ -443,5 +520,8 @@ func (o *IPCPOption) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of IPCPOption in int.
 func (o *IPCPOption) MarshalLen() int {
+	if o == nil {
+		return 0
+	}
 	return 2 + len(o.Payload)
 }

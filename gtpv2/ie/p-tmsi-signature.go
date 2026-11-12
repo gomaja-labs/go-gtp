@@ -36,6 +36,9 @@ func (i *IE) PTMSISignature() (uint32, error) {
 // MustPTMSISignature returns PTMSISignature in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustPTMSISignature() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.PTMSISignature()
 	return v
 }

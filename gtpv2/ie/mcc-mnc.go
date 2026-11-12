@@ -40,21 +40,21 @@ func (i *IE) MCC() (string, error) {
 		}
 		switch {
 		case uliFields.HasCGI():
-			return uliFields.CGI.MCCFromPLMN(), nil
+			return uliFields.CGI.MCC, nil
 		case uliFields.HasSAI():
-			return uliFields.SAI.MCCFromPLMN(), nil
+			return uliFields.SAI.MCC, nil
 		case uliFields.HasRAI():
-			return uliFields.RAI.MCCFromPLMN(), nil
+			return uliFields.RAI.MCC, nil
 		case uliFields.HasTAI():
-			return uliFields.TAI.MCCFromPLMN(), nil
+			return uliFields.TAI.MCC, nil
 		case uliFields.HasECGI():
-			return uliFields.ECGI.MCCFromPLMN(), nil
+			return uliFields.ECGI.MCC, nil
 		case uliFields.HasLAI():
-			return uliFields.LAI.MCCFromPLMN(), nil
+			return uliFields.LAI.MCC, nil
 		case uliFields.HasMENBI():
-			return uliFields.MENBI.MCCFromPLMN(), nil
+			return uliFields.MENBI.MCC, nil
 		case uliFields.HasEMENBI():
-			return uliFields.EMENBI.MCCFromPLMN(), nil
+			return uliFields.EMENBI.MCC, nil
 		}
 		return "", errors.New("MCC is not present in ULI")
 	default:
@@ -65,6 +65,9 @@ func (i *IE) MCC() (string, error) {
 // MustMCC returns MCC in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMCC() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.MCC()
 	return v
 }
@@ -98,21 +101,21 @@ func (i *IE) MNC() (string, error) {
 		}
 		switch {
 		case uliFields.HasCGI():
-			return uliFields.CGI.MNCFromPLMN(), nil
+			return uliFields.CGI.MNC, nil
 		case uliFields.HasSAI():
-			return uliFields.SAI.MNCFromPLMN(), nil
+			return uliFields.SAI.MNC, nil
 		case uliFields.HasRAI():
-			return uliFields.RAI.MNCFromPLMN(), nil
+			return uliFields.RAI.MNC, nil
 		case uliFields.HasTAI():
-			return uliFields.TAI.MNCFromPLMN(), nil
+			return uliFields.TAI.MNC, nil
 		case uliFields.HasECGI():
-			return uliFields.ECGI.MNCFromPLMN(), nil
+			return uliFields.ECGI.MNC, nil
 		case uliFields.HasLAI():
-			return uliFields.LAI.MNCFromPLMN(), nil
+			return uliFields.LAI.MNC, nil
 		case uliFields.HasMENBI():
-			return uliFields.MENBI.MNCFromPLMN(), nil
+			return uliFields.MENBI.MNC, nil
 		case uliFields.HasEMENBI():
-			return uliFields.EMENBI.MNCFromPLMN(), nil
+			return uliFields.EMENBI.MNC, nil
 		}
 		return "", errors.New("MNC is not present in ULI")
 	default:
@@ -123,6 +126,9 @@ func (i *IE) MNC() (string, error) {
 // MustMNC returns MNC in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMNC() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.MNC()
 	return v
 }

@@ -12,7 +12,7 @@ func NewTrafficAggregateDescription(op uint8, filters []*TFTPacketFilter, ids []
 	v := NewTrafficFlowTemplate(op, filters, ids, params)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(TrafficAggregateDescription, err)
 	}
 
 	return New(TrafficAggregateDescription, 0x00, b)
@@ -50,5 +50,8 @@ func NewTrafficAggregateDescriptionNoTFTOperation(params ...*TFTParameter) *IE {
 
 // TrafficAggregateDescription returns TrafficAggregateDescription in TrafficFlowTemplate type if the type of IE matches.
 func (i *IE) TrafficAggregateDescription() (*TrafficFlowTemplate, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	return i.TrafficFlowTemplate()
 }

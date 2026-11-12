@@ -26,7 +26,7 @@ func TestDownlinkDataNotificationAcknowledge(t *testing.T) {
 				ie.NewThrottling(20*time.Hour, 80),
 				ie.NewIMSI("123451234567890"),
 				ie.NewEPCTimer(20*time.Hour),
-				ie.NewIntegerNumber(2020),
+				ie.NewIntegerNumber(2020, 2),
 			),
 			Serialized: []byte{
 				// Header

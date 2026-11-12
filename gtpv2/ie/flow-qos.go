@@ -56,6 +56,9 @@ func NewFlowQoSFields(qci uint8, umbr, dmbr, ugbr, dgbr uint64) *FlowQoSFields {
 
 // Marshal serializes FlowQoSFields.
 func (f *FlowQoSFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -66,6 +69,12 @@ func (f *FlowQoSFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes FlowQoSFields.
 func (f *FlowQoSFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	if len(b) < 21 {
 		return io.ErrUnexpectedEOF
 	}
@@ -108,6 +117,10 @@ func ParseFlowQoSFields(b []byte) (*FlowQoSFields, error) {
 
 // UnmarshalBinary decodes given bytes into FlowQoSFields.
 func (f *FlowQoSFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = FlowQoSFields{}
 	if len(b) < 21 {
 		return io.ErrUnexpectedEOF
 	}
@@ -124,5 +137,8 @@ func (f *FlowQoSFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of FlowQoSFields in int.
 func (f *FlowQoSFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 21
 }

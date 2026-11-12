@@ -12,6 +12,8 @@ import (
 )
 
 var (
+	// ErrAmbiguousIMSI means that the subscriber has several PDN connections.
+	ErrAmbiguousIMSI = errors.New("multiple sessions for IMSI")
 	// ErrTEIDNotFound indicates that TEID is not registered for the interface specified.
 	ErrTEIDNotFound = errors.New("no TEID found")
 
@@ -34,7 +36,8 @@ func (e *CauseNotOKError) Error() string {
 
 // RequiredIEMissingError indicates that the IE required is missing.
 type RequiredIEMissingError struct {
-	Type uint8
+	Type     uint8
+	Instance uint8
 }
 
 // Error returns error with missing IE type.
@@ -69,7 +72,7 @@ type UnexpectedIEError struct {
 
 // Error returns violating message type.
 func (e *UnexpectedIEError) Error() string {
-	return fmt.Sprintf("got unexpected type of message: %T", e.IEType)
+	return fmt.Sprintf("got unexpected IE type: %d", e.IEType)
 }
 
 // InvalidVersionError indicates that the version of the message specified by the user

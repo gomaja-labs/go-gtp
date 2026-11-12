@@ -11,6 +11,9 @@ func NewFullyQualifiedDomainName(fqdn string) *IE {
 
 // FullyQualifiedDomainName returns FullyQualifiedDomainName in string if the type of IE matches.
 func (i *IE) FullyQualifiedDomainName() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != FullyQualifiedDomainName {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -20,6 +23,9 @@ func (i *IE) FullyQualifiedDomainName() (string, error) {
 // MustFullyQualifiedDomainName returns FullyQualifiedDomainName in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustFullyQualifiedDomainName() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.FullyQualifiedDomainName()
 	return v
 }

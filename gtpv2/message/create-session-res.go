@@ -23,9 +23,9 @@ type CreateSessionResponse struct {
 	EBI                           *ie.IE
 	PCO                           *ie.IE
 	BearerContextsCreated         []*ie.IE
-	BearerContextMarkedForRemoval *ie.IE
+	BearerContextMarkedForRemoval []*ie.IE
 	Recovery                      *ie.IE
-	ChargingGatewayName           *ie.IE // = PGWNodeName
+	ChargingGatewayName           *ie.IE
 	ChargingGatewayAddress        *ie.IE
 	PGWFQCSID                     *ie.IE
 	SGWFQCSID                     *ie.IE
@@ -37,9 +37,9 @@ type CreateSessionResponse struct {
 	IndicationFlags               *ie.IE
 	PresenceReportingAreaAction   []*ie.IE
 	PGWNodeLoadControlInformation *ie.IE
-	PGWAPNLoadControlInformation  *ie.IE
+	PGWAPNLoadControlInformation  []*ie.IE
 	SGWNodeLoadControlInformation *ie.IE
-	PGWOverloadControlInformation *ie.IE
+	PGWOverloadControlInformation []*ie.IE
 	SGWOverloadControlInformation *ie.IE
 	NBIFOMContainer               *ie.IE
 	PDNConnectionChargingID       *ie.IE
@@ -57,111 +57,7 @@ func NewCreateSessionResponse(teid, seq uint32, ies ...*ie.IE) *CreateSessionRes
 		),
 	}
 	for _, i := range ies {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.Cause:
-			c.Cause = i
-		case ie.ChangeReportingAction:
-			c.ChangeReportingAction = i
-		case ie.CSGInformationReportingAction:
-			c.CSGInformationReportingAction = i
-		case ie.HeNBInformationReporting:
-			c.HeNBInformationReporting = i
-		case ie.FullyQualifiedTEID:
-			switch i.Instance() {
-			case 0:
-				c.SenderFTEIDC = i
-			case 1:
-				c.PGWS5S8FTEIDC = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.PDNAddressAllocation:
-			c.PAA = i
-		case ie.APNRestriction:
-			c.APNRestriction = i
-		case ie.AggregateMaximumBitRate:
-			c.AMBR = i
-		case ie.EPSBearerID:
-			c.EBI = i
-		case ie.ProtocolConfigurationOptions:
-			c.PCO = i
-		case ie.BearerContext:
-			switch i.Instance() {
-			case 0:
-				c.BearerContextsCreated = append(c.BearerContextsCreated, i)
-			case 1:
-				c.BearerContextMarkedForRemoval = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.Recovery:
-			c.Recovery = i
-		case ie.FullyQualifiedDomainName:
-			c.ChargingGatewayName = i
-		case ie.IPAddress:
-			c.ChargingGatewayAddress = i
-		case ie.FullyQualifiedCSID:
-			switch i.Instance() {
-			case 0:
-				c.PGWFQCSID = i
-			case 1:
-				c.SGWFQCSID = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.LocalDistinguishedName:
-			switch i.Instance() {
-			case 0:
-				c.PGWLDN = i
-			case 1:
-				c.SGWLDN = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.EPCTimer:
-			c.PGWBackOffTime = i
-		case ie.AdditionalProtocolConfigurationOptions:
-			c.APCO = i
-		case ie.IPv4ConfigurationParameters:
-			c.TrustedTWANIPv4Parameters = i
-		case ie.Indication:
-			c.IndicationFlags = i
-		case ie.PresenceReportingAreaAction:
-			c.PresenceReportingAreaAction = append(c.PresenceReportingAreaAction, i)
-		case ie.LoadControlInformation:
-			switch i.Instance() {
-			case 0:
-				c.PGWNodeLoadControlInformation = i
-			case 1:
-				c.PGWAPNLoadControlInformation = i
-			case 2:
-				c.SGWNodeLoadControlInformation = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.OverloadControlInformation:
-			switch i.Instance() {
-			case 0:
-				c.PGWOverloadControlInformation = i
-			case 1:
-				c.SGWOverloadControlInformation = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.FContainer:
-			c.NBIFOMContainer = i
-		case ie.ChargingID:
-			c.PDNConnectionChargingID = i
-		case ie.ExtendedProtocolConfigurationOptions:
-			c.EPCO = i
-		case ie.PrivateExtension:
-			c.PrivateExtension = i
-		default:
-			c.AdditionalIEs = append(c.AdditionalIEs, i)
-		}
+		c.addIE(i)
 	}
 
 	c.SetLength()
@@ -179,227 +75,246 @@ func (c *CreateSessionResponse) Marshal() ([]byte, error) {
 
 // MarshalTo serializes CreateSessionResponse into bytes.
 func (c *CreateSessionResponse) MarshalTo(b []byte) error {
-	if c.Header.Payload != nil {
-		c.Header.Payload = nil
+	if c == nil || c.Header == nil {
+		return ErrNilMessage
 	}
+	if err := c.Header.validate(MsgTypeCreateSessionResponse, c.MarshalLen()); err != nil {
+		return err
+	}
+	if len(b) < c.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	c.Header.Payload = nil
 	c.Header.Payload = make([]byte, c.MarshalLen()-c.Header.MarshalLen())
-
 	offset := 0
-	if ie := c.Cause; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.Cause; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "Cause", iePair{ie.Cause, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.ChangeReportingAction; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.ChangeReportingAction; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "ChangeReportingAction", iePair{ie.ChangeReportingAction, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.CSGInformationReportingAction; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.CSGInformationReportingAction; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "CSGInformationReportingAction", iePair{ie.CSGInformationReportingAction, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.HeNBInformationReporting; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.HeNBInformationReporting; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "HeNBInformationReporting", iePair{ie.HeNBInformationReporting, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.SenderFTEIDC; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.SenderFTEIDC; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "SenderFTEIDC", iePair{ie.FullyQualifiedTEID, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.PGWS5S8FTEIDC; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.PGWS5S8FTEIDC; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PGWS5S8FTEIDC", iePair{ie.FullyQualifiedTEID, 1}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.PAA; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.PAA; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PAA", iePair{ie.PDNAddressAllocation, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.APNRestriction; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.APNRestriction; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "APNRestriction", iePair{ie.APNRestriction, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.AMBR; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.AMBR; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "AMBR", iePair{ie.AggregateMaximumBitRate, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.EBI; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.EBI; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "EBI", iePair{ie.EPSBearerID, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := c.PCO; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
+	if i := c.PCO; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PCO", iePair{ie.ProtocolConfigurationOptions, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	for _, ie := range c.BearerContextsCreated {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.BearerContextMarkedForRemoval; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.Recovery; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.ChargingGatewayName; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.ChargingGatewayAddress; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PGWFQCSID; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.SGWFQCSID; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PGWLDN; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.SGWLDN; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PGWBackOffTime; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.APCO; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.TrustedTWANIPv4Parameters; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.IndicationFlags; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	for _, ie := range c.PresenceReportingAreaAction {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PGWNodeLoadControlInformation; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PGWAPNLoadControlInformation; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.SGWNodeLoadControlInformation; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PGWOverloadControlInformation; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.SGWOverloadControlInformation; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.NBIFOMContainer; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PDNConnectionChargingID; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.EPCO; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := c.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(c.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range c.AdditionalIEs {
-		if ie == nil {
+	for _, i := range c.BearerContextsCreated {
+		if i == nil {
 			continue
 		}
-		if err := ie.MarshalTo(c.Header.Payload[offset:]); err != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "BearerContextsCreated", iePair{ie.BearerContext, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
+	for _, i := range c.BearerContextMarkedForRemoval {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, c.Payload[offset:], "BearerContextMarkedForRemoval", iePair{ie.BearerContext, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.Recovery; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "Recovery", iePair{ie.Recovery, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.ChargingGatewayName; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "ChargingGatewayName", iePair{ie.FullyQualifiedDomainName, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.ChargingGatewayAddress; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "ChargingGatewayAddress", iePair{ie.IPAddress, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.PGWFQCSID; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PGWFQCSID", iePair{ie.FullyQualifiedCSID, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.SGWFQCSID; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "SGWFQCSID", iePair{ie.FullyQualifiedCSID, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.SGWLDN; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "SGWLDN", iePair{ie.LocalDistinguishedName, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.PGWLDN; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PGWLDN", iePair{ie.LocalDistinguishedName, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.PGWBackOffTime; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PGWBackOffTime", iePair{ie.EPCTimer, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.APCO; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "APCO", iePair{ie.AdditionalProtocolConfigurationOptions, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.TrustedTWANIPv4Parameters; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "TrustedTWANIPv4Parameters", iePair{ie.IPv4ConfigurationParameters, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.IndicationFlags; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "IndicationFlags", iePair{ie.Indication, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range c.PresenceReportingAreaAction {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, c.Payload[offset:], "PresenceReportingAreaAction", iePair{ie.PresenceReportingAreaAction, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.PGWNodeLoadControlInformation; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PGWNodeLoadControlInformation", iePair{ie.LoadControlInformation, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range c.PGWAPNLoadControlInformation {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, c.Payload[offset:], "PGWAPNLoadControlInformation", iePair{ie.LoadControlInformation, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.SGWNodeLoadControlInformation; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "SGWNodeLoadControlInformation", iePair{ie.LoadControlInformation, 2}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range c.PGWOverloadControlInformation {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, c.Payload[offset:], "PGWOverloadControlInformation", iePair{ie.OverloadControlInformation, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.SGWOverloadControlInformation; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "SGWOverloadControlInformation", iePair{ie.OverloadControlInformation, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.NBIFOMContainer; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "NBIFOMContainer", iePair{ie.FContainer, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.PDNConnectionChargingID; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PDNConnectionChargingID", iePair{ie.ChargingID, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.EPCO; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "EPCO", iePair{ie.ExtendedProtocolConfigurationOptions, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := c.PrivateExtension; i != nil {
+		if err := marshalNamedIE(i, c.Payload[offset:], "PrivateExtension", iePair{ie.PrivateExtension, 255}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range c.AdditionalIEs {
+		if i == nil {
+			continue
+		}
+		if err := i.MarshalTo(c.Payload[offset:]); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
 	c.Header.SetLength()
 	return c.Header.MarshalTo(b)
 }
@@ -408,6 +323,9 @@ func (c *CreateSessionResponse) MarshalTo(b []byte) error {
 func ParseCreateSessionResponse(b []byte) (*CreateSessionResponse, error) {
 	c := &CreateSessionResponse{}
 	if err := c.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return c, err
+		}
 		return nil, err
 	}
 	return c, nil
@@ -415,247 +333,156 @@ func ParseCreateSessionResponse(b []byte) (*CreateSessionResponse, error) {
 
 // UnmarshalBinary decodes given bytes as CreateSessionResponse.
 func (c *CreateSessionResponse) UnmarshalBinary(b []byte) error {
-	var err error
-	c.Header, err = ParseHeader(b)
+	if c == nil {
+		return ErrNilMessage
+	}
+	*c = CreateSessionResponse{}
+	h, err := ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(c.Header.Payload) < 2 {
-		return nil
+	if h.Type != MsgTypeCreateSessionResponse {
+		return &UnexpectedTypeError{Expected: MsgTypeCreateSessionResponse, Actual: h.Type}
 	}
-
-	decodedIEs, err := ie.ParseMultiIEs(c.Header.Payload)
+	c.Header = h
+	decodedIEs, err := parseMessageIEs(h)
 	if err != nil {
 		return err
 	}
-
-	for _, i := range decodedIEs {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.Cause:
-			c.Cause = i
-		case ie.ChangeReportingAction:
-			c.ChangeReportingAction = i
-		case ie.CSGInformationReportingAction:
-			c.CSGInformationReportingAction = i
-		case ie.HeNBInformationReporting:
-			c.HeNBInformationReporting = i
-		case ie.FullyQualifiedTEID:
-			switch i.Instance() {
-			case 0:
-				c.SenderFTEIDC = i
-			case 1:
-				c.PGWS5S8FTEIDC = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.PDNAddressAllocation:
-			c.PAA = i
-		case ie.APNRestriction:
-			c.APNRestriction = i
-		case ie.AggregateMaximumBitRate:
-			c.AMBR = i
-		case ie.EPSBearerID:
-			c.EBI = i
-		case ie.ProtocolConfigurationOptions:
-			c.PCO = i
-		case ie.BearerContext:
-			switch i.Instance() {
-			case 0:
-				c.BearerContextsCreated = append(c.BearerContextsCreated, i)
-			case 1:
-				c.BearerContextMarkedForRemoval = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.Recovery:
-			c.Recovery = i
-		case ie.FullyQualifiedDomainName:
-			c.ChargingGatewayName = i
-		case ie.IPAddress:
-			c.ChargingGatewayAddress = i
-		case ie.FullyQualifiedCSID:
-			switch i.Instance() {
-			case 0:
-				c.PGWFQCSID = i
-			case 1:
-				c.SGWFQCSID = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.LocalDistinguishedName:
-			switch i.Instance() {
-			case 0:
-				c.PGWLDN = i
-			case 1:
-				c.SGWLDN = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.EPCTimer:
-			c.PGWBackOffTime = i
-		case ie.AdditionalProtocolConfigurationOptions:
-			c.APCO = i
-		case ie.IPv4ConfigurationParameters:
-			c.TrustedTWANIPv4Parameters = i
-		case ie.Indication:
-			c.IndicationFlags = i
-		case ie.PresenceReportingAreaAction:
-			c.PresenceReportingAreaAction = append(c.PresenceReportingAreaAction, i)
-		case ie.LoadControlInformation:
-			switch i.Instance() {
-			case 0:
-				c.PGWNodeLoadControlInformation = i
-			case 1:
-				c.PGWAPNLoadControlInformation = i
-			case 2:
-				c.SGWNodeLoadControlInformation = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.OverloadControlInformation:
-			switch i.Instance() {
-			case 0:
-				c.PGWOverloadControlInformation = i
-			case 1:
-				c.SGWOverloadControlInformation = i
-			default:
-				c.AdditionalIEs = append(c.AdditionalIEs, i)
-			}
-		case ie.FContainer:
-			c.NBIFOMContainer = i
-		case ie.ChargingID:
-			c.PDNConnectionChargingID = i
-		case ie.ExtendedProtocolConfigurationOptions:
-			c.EPCO = i
-		case ie.PrivateExtension:
-			c.PrivateExtension = i
-		default:
-			c.AdditionalIEs = append(c.AdditionalIEs, i)
-		}
-	}
-
-	return nil
+	return addDecodedIEs(h, decodedIEs, c.addIE)
 }
 
 // MarshalLen returns the serial length in int.
 func (c *CreateSessionResponse) MarshalLen() int {
+	if c == nil || c.Header == nil {
+		return 0
+	}
 	l := c.Header.MarshalLen() - len(c.Header.Payload)
-
-	if ie := c.Cause; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.Cause; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.ChangeReportingAction; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.ChangeReportingAction; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.CSGInformationReportingAction; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.CSGInformationReportingAction; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.HeNBInformationReporting; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.HeNBInformationReporting; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.SenderFTEIDC; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.SenderFTEIDC; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PGWS5S8FTEIDC; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PGWS5S8FTEIDC; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PAA; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PAA; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.APNRestriction; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.APNRestriction; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.AMBR; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.AMBR; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.EBI; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.EBI; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PCO; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PCO; i != nil {
+		l += i.MarshalLen()
 	}
-	for _, ie := range c.BearerContextsCreated {
-		l += ie.MarshalLen()
+	for _, i := range c.BearerContextsCreated {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
-	if ie := c.BearerContextMarkedForRemoval; ie != nil {
-		l += ie.MarshalLen()
+	for _, i := range c.BearerContextMarkedForRemoval {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
-	if ie := c.Recovery; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.Recovery; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.ChargingGatewayName; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.ChargingGatewayName; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.ChargingGatewayAddress; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.ChargingGatewayAddress; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PGWFQCSID; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PGWFQCSID; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.SGWFQCSID; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.SGWFQCSID; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PGWLDN; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.SGWLDN; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.SGWLDN; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PGWLDN; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PGWBackOffTime; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PGWBackOffTime; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.APCO; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.APCO; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.TrustedTWANIPv4Parameters; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.TrustedTWANIPv4Parameters; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.IndicationFlags; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.IndicationFlags; i != nil {
+		l += i.MarshalLen()
 	}
-	for _, ie := range c.PresenceReportingAreaAction {
-		l += ie.MarshalLen()
+	for _, i := range c.PresenceReportingAreaAction {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
-	if ie := c.PGWNodeLoadControlInformation; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PGWNodeLoadControlInformation; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PGWAPNLoadControlInformation; ie != nil {
-		l += ie.MarshalLen()
+	for _, i := range c.PGWAPNLoadControlInformation {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
-	if ie := c.SGWNodeLoadControlInformation; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.SGWNodeLoadControlInformation; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PGWOverloadControlInformation; ie != nil {
-		l += ie.MarshalLen()
+	for _, i := range c.PGWOverloadControlInformation {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
-	if ie := c.SGWOverloadControlInformation; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.SGWOverloadControlInformation; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.NBIFOMContainer; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.NBIFOMContainer; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PDNConnectionChargingID; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PDNConnectionChargingID; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.EPCO; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.EPCO; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := c.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
+	if i := c.PrivateExtension; i != nil {
+		l += i.MarshalLen()
 	}
-
-	for _, ie := range c.AdditionalIEs {
-		l += ie.MarshalLen()
+	for _, i := range c.AdditionalIEs {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
 	return l
 }
 
 // SetLength sets the length in Length field.
 func (c *CreateSessionResponse) SetLength() {
-	c.Header.Length = uint16(c.MarshalLen() - 4)
+	if c != nil && c.Header != nil {
+		c.Header.setLength(c.MarshalLen() - c.Header.piggybackLen() - 4)
+	}
 }
 
 // MessageTypeName returns the name of protocol.
@@ -665,5 +492,324 @@ func (c *CreateSessionResponse) MessageTypeName() string {
 
 // TEID returns the TEID in uint32.
 func (c *CreateSessionResponse) TEID() uint32 {
+	if c == nil {
+		return 0
+	}
 	return c.Header.teid()
 }
+
+func (c *CreateSessionResponse) GetHeader() *Header {
+	if c == nil {
+		return nil
+	}
+	return c.Header
+}
+
+// TS 29.274 Table 7.2.2-1: identify IEs by type and instance; §7.7.10: keep the first singleton.
+func (c *CreateSessionResponse) addIE(i *ie.IE) {
+	if i == nil {
+		return
+	}
+	if err := i.Err(); err != nil {
+		c.Header.err = err
+	}
+	switch i.Type {
+	case ie.Cause:
+		switch i.Instance() {
+		case 0:
+			if c.Cause == nil {
+				c.Cause = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.ChangeReportingAction:
+		switch i.Instance() {
+		case 0:
+			if c.ChangeReportingAction == nil {
+				c.ChangeReportingAction = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.CSGInformationReportingAction:
+		switch i.Instance() {
+		case 0:
+			if c.CSGInformationReportingAction == nil {
+				c.CSGInformationReportingAction = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.HeNBInformationReporting:
+		switch i.Instance() {
+		case 0:
+			if c.HeNBInformationReporting == nil {
+				c.HeNBInformationReporting = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.FullyQualifiedTEID:
+		switch i.Instance() {
+		case 0:
+			if c.SenderFTEIDC == nil {
+				c.SenderFTEIDC = i
+			}
+		case 1:
+			if c.PGWS5S8FTEIDC == nil {
+				c.PGWS5S8FTEIDC = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.PDNAddressAllocation:
+		switch i.Instance() {
+		case 0:
+			if c.PAA == nil {
+				c.PAA = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.APNRestriction:
+		switch i.Instance() {
+		case 0:
+			if c.APNRestriction == nil {
+				c.APNRestriction = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.AggregateMaximumBitRate:
+		switch i.Instance() {
+		case 0:
+			if c.AMBR == nil {
+				c.AMBR = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.EPSBearerID:
+		switch i.Instance() {
+		case 0:
+			if c.EBI == nil {
+				c.EBI = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.ProtocolConfigurationOptions:
+		switch i.Instance() {
+		case 0:
+			if c.PCO == nil {
+				c.PCO = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.BearerContext:
+		switch i.Instance() {
+		case 0:
+			c.BearerContextsCreated = append(c.BearerContextsCreated, i)
+		case 1:
+			c.BearerContextMarkedForRemoval = append(c.BearerContextMarkedForRemoval, i)
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.Recovery:
+		switch i.Instance() {
+		case 0:
+			if c.Recovery == nil {
+				c.Recovery = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.FullyQualifiedDomainName:
+		switch i.Instance() {
+		case 0:
+			if c.ChargingGatewayName == nil {
+				c.ChargingGatewayName = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.IPAddress:
+		switch i.Instance() {
+		case 0:
+			if c.ChargingGatewayAddress == nil {
+				c.ChargingGatewayAddress = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.FullyQualifiedCSID:
+		switch i.Instance() {
+		case 0:
+			if c.PGWFQCSID == nil {
+				c.PGWFQCSID = i
+			}
+		case 1:
+			if c.SGWFQCSID == nil {
+				c.SGWFQCSID = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.LocalDistinguishedName:
+		switch i.Instance() {
+		case 1:
+			if c.PGWLDN == nil {
+				c.PGWLDN = i
+			}
+		case 0:
+			if c.SGWLDN == nil {
+				c.SGWLDN = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.EPCTimer:
+		switch i.Instance() {
+		case 0:
+			if c.PGWBackOffTime == nil {
+				c.PGWBackOffTime = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.AdditionalProtocolConfigurationOptions:
+		switch i.Instance() {
+		case 0:
+			if c.APCO == nil {
+				c.APCO = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.IPv4ConfigurationParameters:
+		switch i.Instance() {
+		case 0:
+			if c.TrustedTWANIPv4Parameters == nil {
+				c.TrustedTWANIPv4Parameters = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.Indication:
+		switch i.Instance() {
+		case 0:
+			if c.IndicationFlags == nil {
+				c.IndicationFlags = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.PresenceReportingAreaAction:
+		switch i.Instance() {
+		case 0:
+			c.PresenceReportingAreaAction = append(c.PresenceReportingAreaAction, i)
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.LoadControlInformation:
+		switch i.Instance() {
+		case 0:
+			if c.PGWNodeLoadControlInformation == nil {
+				c.PGWNodeLoadControlInformation = i
+			}
+		case 1:
+			c.PGWAPNLoadControlInformation = append(c.PGWAPNLoadControlInformation, i)
+		case 2:
+			if c.SGWNodeLoadControlInformation == nil {
+				c.SGWNodeLoadControlInformation = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.OverloadControlInformation:
+		switch i.Instance() {
+		case 0:
+			c.PGWOverloadControlInformation = append(c.PGWOverloadControlInformation, i)
+		case 1:
+			if c.SGWOverloadControlInformation == nil {
+				c.SGWOverloadControlInformation = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.FContainer:
+		switch i.Instance() {
+		case 0:
+			if c.NBIFOMContainer == nil {
+				c.NBIFOMContainer = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.ChargingID:
+		switch i.Instance() {
+		case 0:
+			if c.PDNConnectionChargingID == nil {
+				c.PDNConnectionChargingID = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.ExtendedProtocolConfigurationOptions:
+		switch i.Instance() {
+		case 0:
+			if c.EPCO == nil {
+				c.EPCO = i
+			}
+		default:
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	case ie.PrivateExtension:
+		if c.PrivateExtension == nil {
+			c.PrivateExtension = i
+		} else if c.PrivateExtension.Instance() != i.Instance() {
+			c.AdditionalIEs = append(c.AdditionalIEs, i)
+		}
+	default:
+		c.AdditionalIEs = append(c.AdditionalIEs, i)
+	}
+}
+
+// Version reads the common header, returning zero for a nil receiver.
+func (c *CreateSessionResponse) Version() int { return c.GetHeader().Version() }
+
+// MessageType reads the common header, returning zero for a nil receiver.
+func (c *CreateSessionResponse) MessageType() uint8 { return c.GetHeader().MessageType() }
+
+// Sequence reads the common header, returning zero for a nil receiver.
+func (c *CreateSessionResponse) Sequence() uint32 { return c.GetHeader().Sequence() }
+
+// IsPiggybacking reads the common header, returning zero for a nil receiver.
+func (c *CreateSessionResponse) IsPiggybacking() bool { return c.GetHeader().IsPiggybacking() }
+
+// HasTEID reads the common header, returning zero for a nil receiver.
+func (c *CreateSessionResponse) HasTEID() bool { return c.GetHeader().HasTEID() }
+
+// HasMessagePriority reads the common header, returning zero for a nil receiver.
+func (c *CreateSessionResponse) HasMessagePriority() bool { return c.GetHeader().HasMessagePriority() }
+
+// MessagePriority reads the common header, returning zero for a nil receiver.
+func (c *CreateSessionResponse) MessagePriority() uint8 { return c.GetHeader().MessagePriority() }
+
+// SetSequenceNumber updates the common header safely on a nil receiver.
+func (c *CreateSessionResponse) SetSequenceNumber(seq uint32) error {
+	return c.GetHeader().SetSequenceNumber(seq)
+}
+
+// SetMessagePriority updates the common header safely on a nil receiver.
+func (c *CreateSessionResponse) SetMessagePriority(priority uint8) error {
+	return c.GetHeader().SetMessagePriority(priority)
+}
+
+// SetTEID updates the common header safely on a nil receiver.
+func (c *CreateSessionResponse) SetTEID(teid uint32) { c.GetHeader().SetTEID(teid) }
+
+// SetPiggybacking updates the common header safely on a nil receiver.
+func (c *CreateSessionResponse) SetPiggybacking(value uint8) { c.GetHeader().SetPiggybacking(value) }

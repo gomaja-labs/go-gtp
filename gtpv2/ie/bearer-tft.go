@@ -23,7 +23,7 @@ func NewBearerTFT(op uint8, filters []*TFTPacketFilter, ids []uint8, params []*T
 	v := NewTrafficFlowTemplate(op, filters, ids, params)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(BearerTFT, err)
 	}
 
 	return New(BearerTFT, 0x00, b)
@@ -61,5 +61,8 @@ func NewBearerTFTNoTFTOperation(params ...*TFTParameter) *IE {
 
 // BearerTFT returns TrafficFlowTemplate struct if the type of IE matches.
 func (i *IE) BearerTFT() (*TrafficFlowTemplate, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	return i.TrafficFlowTemplate()
 }

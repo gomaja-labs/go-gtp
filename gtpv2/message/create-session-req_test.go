@@ -39,7 +39,7 @@ func TestCreateSessionRequest(t *testing.T) {
 				ie.NewServingNetwork("123", "45"),
 				ie.NewPDNAddressAllocation("2.2.2.2"),
 				ie.NewAPNRestriction(gtpv2.APNRestrictionPublic1),
-				ie.NewUserLocationInformationStruct(
+				ie.NewUserLocationInformation(
 					nil, nil, nil, ie.NewTAI("123", "45", 0x0001),
 					ie.NewECGI("123", "45", 0x00000101), nil, nil, nil,
 				),

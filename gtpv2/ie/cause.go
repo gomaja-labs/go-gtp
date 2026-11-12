@@ -11,14 +11,17 @@ import (
 
 // NewCause creates a new Cause IE.
 func NewCause(cause uint8, pce, bce, cs uint8, offendingIE *IE) *IE {
+	// TS 29.274 §8.4: reject fields that do not fit.
+	if pce > 1 || bce > 1 || cs > 1 {
+		return newErrorIE(Cause, ErrMalformed)
+	}
 	i := New(Cause, 0x00, make([]byte, 2))
 	i.Payload[0] = cause
 	i.Payload[1] = ((pce << 2) & 0x04) | ((bce << 1) & 0x02) | cs&0x01
 
 	if offendingIE != nil {
-		// trailing zeroes are length, instance and spare fields which should be
-		// filled with zeroes in this case (cf. §8.4, TS29.274)
-		i.Payload = append(i.Payload, []byte{offendingIE.Type, 0x00, 0x00, 0x00}...)
+		// TS 29.274 §8.4: retain Type and Instance; Length and spare are zero.
+		i.Payload = append(i.Payload, []byte{offendingIE.Type, 0x00, 0x00, offendingIE.Instance()}...)
 		i.SetLength()
 	}
 	return i
@@ -26,8 +29,14 @@ func NewCause(cause uint8, pce, bce, cs uint8, offendingIE *IE) *IE {
 
 // Cause returns Cause in uint8 if the type of IE matches.
 func (i *IE) Cause() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case Cause:
+		if len(i.Payload) < 2 {
+			return 0, ErrInvalidLength
+		}
 		return i.ValueAsUint8()
 	case BearerContext:
 		ies, err := i.BearerContext()
@@ -35,8 +44,9 @@ func (i *IE) Cause() (uint8, error) {
 			return 0, fmt.Errorf("failed to retrieve Cause: %w", err)
 		}
 
+		// TS 29.274 §7.7.9: match the child type and instance together.
 		for _, child := range ies {
-			if child.Type == Cause {
+			if child != nil && child.Type == Cause && child.Instance() == 0 {
 				return child.Cause()
 			}
 		}
@@ -49,28 +59,36 @@ func (i *IE) Cause() (uint8, error) {
 // MustCause returns Cause in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustCause() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.Cause()
 	return v
 }
 
 // CauseFlags returns CauseFlags in uint8 if the type of IE matches.
 func (i *IE) CauseFlags() (uint8, error) {
+	// TS 29.274 §8.4: CS, BCE, PCE occupy bits 1, 2, 3.
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case Cause:
 		if len(i.Payload) < 2 {
 			return 0, io.ErrUnexpectedEOF
 		}
 
-		return i.Payload[1], nil
+		return i.Payload[1] & 7, nil
 	case BearerContext:
 		ies, err := i.BearerContext()
 		if err != nil {
 			return 0, fmt.Errorf("failed to retrieve Cause: %w", err)
 		}
 
+		// TS 29.274 §7.7.9: match the child type and instance together.
 		for _, child := range ies {
-			if child.Type == Cause {
-				return child.Cause()
+			if child != nil && child.Type == Cause && child.Instance() == 0 {
+				return child.CauseFlags()
 			}
 		}
 		return 0, ErrIENotFound
@@ -82,22 +100,18 @@ func (i *IE) CauseFlags() (uint8, error) {
 // MustCauseFlags returns CauseFlags in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustCauseFlags() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.CauseFlags()
 	return v
 }
 
 // HasCS reports whether an IE has CS bit.
 func (i *IE) HasCS() bool {
-	v, err := i.CauseFlags()
-	if err != nil {
+	if i == nil {
 		return false
 	}
-
-	return has2ndBit(v)
-}
-
-// HasBCE reports whether an IE has BCE bit.
-func (i *IE) HasBCE() bool {
 	v, err := i.CauseFlags()
 	if err != nil {
 		return false
@@ -106,8 +120,24 @@ func (i *IE) HasBCE() bool {
 	return has1stBit(v)
 }
 
+// HasBCE reports whether an IE has BCE bit.
+func (i *IE) HasBCE() bool {
+	if i == nil {
+		return false
+	}
+	v, err := i.CauseFlags()
+	if err != nil {
+		return false
+	}
+
+	return has2ndBit(v)
+}
+
 // HasPCE reports whether an IE has PCE bit.
 func (i *IE) HasPCE() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.CauseFlags()
 	if err != nil {
 		return false
@@ -118,6 +148,9 @@ func (i *IE) HasPCE() bool {
 
 // IsRemoteCause returns IsRemoteCause in bool if the type of IE matches.
 func (i *IE) IsRemoteCause() bool {
+	if i.Err() != nil {
+		return false
+	}
 	if i.Type != Cause {
 		return false
 	}
@@ -126,7 +159,7 @@ func (i *IE) IsRemoteCause() bool {
 		return false
 	}
 
-	if i.Payload[1]>>2&0x01 == 1 {
+	if i.Payload[1]&0x01 == 1 {
 		return true
 	}
 	return false
@@ -134,6 +167,9 @@ func (i *IE) IsRemoteCause() bool {
 
 // IsBearerContextIEError returns IsBearerContextIEError in bool if the type of IE matches.
 func (i *IE) IsBearerContextIEError() bool {
+	if i.Err() != nil {
+		return false
+	}
 	if i.Type != Cause {
 		return false
 	}
@@ -150,6 +186,9 @@ func (i *IE) IsBearerContextIEError() bool {
 
 // IsPDNConnectionIEError returns IsPDNConnectionIEError in bool if the type of IE matches.
 func (i *IE) IsPDNConnectionIEError() bool {
+	if i.Err() != nil {
+		return false
+	}
 	if i.Type != Cause {
 		return false
 	}
@@ -158,7 +197,7 @@ func (i *IE) IsPDNConnectionIEError() bool {
 		return false
 	}
 
-	if i.Payload[1]&0x01 == 1 {
+	if i.Payload[1]>>2&0x01 == 1 {
 		return true
 	}
 	return false
@@ -168,6 +207,10 @@ func (i *IE) IsPDNConnectionIEError() bool {
 //
 // Note that the returned IE has no payload (cf. §8.4, TS29.274).
 func (i *IE) OffendingIE() (*IE, error) {
+
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != Cause {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}

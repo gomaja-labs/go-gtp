@@ -20,7 +20,7 @@ func TestSuspendNotification(t *testing.T) {
 			Structured: message.NewSuspendNotification(
 				testutils.TestBearerInfo.TEID, testutils.TestBearerInfo.Seq,
 				ie.NewIMSI("123451234567890"),
-				ie.NewUserLocationInformationStruct(
+				ie.NewUserLocationInformation(
 					nil, nil, nil, ie.NewTAI("123", "45", 0x0001),
 					ie.NewECGI("123", "45", 0x00000101), nil, nil, nil,
 				),
@@ -46,8 +46,8 @@ func TestSuspendNotification(t *testing.T) {
 				0x49, 0x00, 0x01, 0x00, 0x05,
 				// PacketTMSI
 				0x6f, 0x00, 0x04, 0x00, 0xde, 0xad, 0xbe, 0xef,
-				// NodeType
-				0x87, 0x00, 0x01, 0x00, 0x01,
+				// TS 29.274 Table 8.65-1: MME is Node Type 0.
+				0x87, 0x00, 0x01, 0x00, 0x00,
 				// IPAddress
 				0x4a, 0x00, 0x04, 0x00, 0x01, 0x01, 0x01, 0x01,
 				// PortNumber

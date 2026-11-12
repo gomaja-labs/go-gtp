@@ -18,7 +18,7 @@ func NewGroupedIE(itype uint8, ies ...*IE) *IE {
 
 		serialized, err := ie.Marshal()
 		if err != nil {
-			return nil
+			return newErrorIE(itype, err)
 		}
 
 		i.Payload = append(i.Payload, serialized...)
@@ -78,12 +78,24 @@ func AddGroupedIEType(ts ...uint8) {
 // You can change this entire behavior by calling SetIsGroupedFun(), or you can add
 // new IE types to the defaultGroupedIEMap by calling AddGroupedIEType().
 func (i *IE) IsGrouped() bool {
-	return isGroupedFun(i.Type)
+	if i == nil {
+		return false
+	}
+	mu.RLock()
+	fun := isGroupedFun
+	mu.RUnlock()
+	if fun == nil {
+		return false
+	}
+	return fun(i.Type)
 }
 
 // Add adds variable number of IEs to a grouped IE and update length of it.
 // This does nothing if the type of the IE is not grouped (no errors).
 func (i *IE) Add(ies ...*IE) {
+	if i == nil {
+		return
+	}
 	if !i.IsGrouped() {
 		return
 	}
@@ -94,37 +106,29 @@ func (i *IE) Add(ies ...*IE) {
 		}
 		i.ChildIEs = append(i.ChildIEs, ie)
 
-		serialized, err := ie.Marshal()
-		if err != nil {
-			continue
-		}
-		i.Payload = append(i.Payload, serialized...)
 	}
 	i.SetLength()
 }
 
 // Remove removes an IE looked up by type and instance.
 func (i *IE) Remove(typ, instance uint8) {
+	if i == nil {
+		return
+	}
 	if !i.IsGrouped() {
 		return
 	}
 
 	i.Payload = nil
-	newChildren := make([]*IE, len(i.ChildIEs))
-	idx := 0
+	newChildren := make([]*IE, 0, len(i.ChildIEs))
 	for _, ie := range i.ChildIEs {
-		if ie.Type == typ && ie.Instance() == instance {
-			newChildren = newChildren[:len(newChildren)-1]
+		if ie == nil {
 			continue
 		}
-		newChildren[idx] = ie
-		idx++
-
-		serialized, err := ie.Marshal()
-		if err != nil {
+		if ie != nil && ie.Type == typ && ie.Instance() == instance {
 			continue
 		}
-		i.Payload = append(i.Payload, serialized...)
+		newChildren = append(newChildren, ie)
 	}
 	i.ChildIEs = newChildren
 	i.SetLength()
@@ -135,12 +139,15 @@ func (i *IE) Remove(typ, instance uint8) {
 // The program may be slower when calling this method multiple times
 // because this ranges over a ChildIEs each time it is called.
 func (i *IE) FindByType(typ, instance uint8) (*IE, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if !i.IsGrouped() {
 		return nil, ErrInvalidType
 	}
 
 	for _, ie := range i.ChildIEs {
-		if ie.Type == typ && ie.Instance() == instance {
+		if ie != nil && ie.Type == typ && ie.Instance() == instance {
 			return ie, nil
 		}
 	}

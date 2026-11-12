@@ -29,5 +29,11 @@ type InvalidTypeError struct {
 
 // Error returns message with the invalid type given.
 func (e *InvalidTypeError) Error() string {
+	if e == nil {
+		return ""
+	}
 	return fmt.Sprintf("got invalid type: %v", e.Type)
 }
+
+// Unwrap exposes the invalid-type category.
+func (e *InvalidTypeError) Unwrap() error { return ErrInvalidType }

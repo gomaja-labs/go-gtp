@@ -11,7 +11,12 @@ import (
 
 // NewDelayValue creates a new DelayValue IE.
 func NewDelayValue(delay time.Duration) *IE {
-	return NewUint8IE(DelayValue, uint8(delay.Seconds()*1000/50))
+	// TS 29.274 §8.27: multiples of 50 milliseconds in one octet.
+	const unit = 50 * time.Millisecond
+	if delay < 0 || delay%unit != 0 || delay/unit > 255 {
+		return newErrorIE(DelayValue, ErrMalformed)
+	}
+	return NewDelayValueRaw(uint8(delay / unit))
 }
 
 // NewDelayValueRaw creates a new DelayValue IE from a uint8 value.
@@ -26,6 +31,9 @@ func NewDelayValueRaw(delay uint8) *IE {
 // The returned value is in time.Duration. To get the value in multiples of 50ms,
 // use ValueAsUint8 or access Payload field directly instead.
 func (i *IE) DelayValue() (time.Duration, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != DelayValue {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -33,7 +41,7 @@ func (i *IE) DelayValue() (time.Duration, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return time.Duration(i.Payload[0]/50) * time.Millisecond, nil
+	return time.Duration(i.Payload[0]) * 50 * time.Millisecond, nil
 }
 
 // MustDelayValue returns DelayValue in time.Duration, ignoring errors.

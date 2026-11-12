@@ -11,6 +11,9 @@ func NewAPNRestriction(restriction uint8) *IE {
 
 // APNRestriction returns APNRestriction in uint8 if the type of IE matches.
 func (i *IE) APNRestriction() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != APNRestriction {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -21,11 +24,17 @@ func (i *IE) APNRestriction() (uint8, error) {
 // MustAPNRestriction returns APNRestriction in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustAPNRestriction() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.APNRestriction()
 	return v
 }
 
 // RestrictionType returns RestrictionType in uint8 if the type of IE matches.
 func (i *IE) RestrictionType() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	return i.APNRestriction()
 }

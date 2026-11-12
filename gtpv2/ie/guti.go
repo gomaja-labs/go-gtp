@@ -56,6 +56,9 @@ func NewGUTIFields(mcc, mnc string, groupID uint16, code uint8, mTMSI uint32) *G
 
 // Marshal serializes GUTIFields.
 func (f *GUTIFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -66,14 +69,21 @@ func (f *GUTIFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes GUTIFields.
 func (f *GUTIFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
 	}
 
+	// TS 29.274 §8.47: the first three octets must encode a valid PLMN.
 	plmn, err := utils.EncodePLMN(f.MCC, f.MNC)
 	if err != nil {
-		return nil
+		return err
 	}
 	copy(b[0:3], plmn)
 
@@ -99,6 +109,10 @@ func ParseGUTIFields(b []byte) (*GUTIFields, error) {
 
 // UnmarshalBinary decodes given bytes into GUTIFields.
 func (f *GUTIFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = GUTIFields{}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
@@ -124,6 +138,9 @@ func (f *GUTIFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of GUTIFields in int.
 func (f *GUTIFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 10
 }
 
@@ -146,6 +163,9 @@ func (i *IE) MMEGroupID() (uint16, error) {
 // MustMMEGroupID returns MMEGroupID in uint16, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMMEGroupID() uint16 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.MMEGroupID()
 	return v
 }
@@ -169,6 +189,9 @@ func (i *IE) MMECode() (uint8, error) {
 // MustMMECode returns MMECode in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMMECode() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.MMECode()
 	return v
 }
@@ -192,6 +215,9 @@ func (i *IE) MTMSI() (uint32, error) {
 // MustMTMSI returns MTMSI in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMTMSI() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.MTMSI()
 	return v
 }

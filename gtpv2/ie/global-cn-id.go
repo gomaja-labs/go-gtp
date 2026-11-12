@@ -44,6 +44,9 @@ func (i *IE) CNID() (uint16, error) {
 // MustCNID returns CNID in uint16, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustCNID() uint16 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.CNID()
 	return v
 }

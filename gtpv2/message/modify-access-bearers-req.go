@@ -30,32 +30,7 @@ func NewModifyAccessBearersRequest(teid, seq uint32, ies ...*ie.IE) *ModifyAcces
 	}
 
 	for _, i := range ies {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.Indication:
-			m.IndicationFlags = i
-		case ie.NodeType:
-			m.SenderFTEIDC = i
-		case ie.DelayValue:
-			m.DelayDownlinkPacketNotificationRequest = i
-		case ie.BearerContext:
-			switch i.Instance() {
-			case 0:
-				m.BearerContextsToBeModified = append(m.BearerContextsToBeModified, i)
-			case 1:
-				m.BearerContextsToBeRemoved = append(m.BearerContextsToBeRemoved, i)
-			}
-		case ie.Recovery:
-			m.Recovery = i
-		case ie.SecondaryRATUsageDataReport:
-			m.SecondaryRATUsageDataReport = append(m.SecondaryRATUsageDataReport, i)
-		case ie.PrivateExtension:
-			m.PrivateExtension = i
-		default:
-			m.AdditionalIEs = append(m.AdditionalIEs, i)
-		}
+		m.addIE(i)
 	}
 
 	m.SetLength()
@@ -73,71 +48,84 @@ func (m *ModifyAccessBearersRequest) Marshal() ([]byte, error) {
 
 // MarshalTo serializes ModifyAccessBearersRequest into bytes.
 func (m *ModifyAccessBearersRequest) MarshalTo(b []byte) error {
-	if m.Header.Payload != nil {
-		m.Header.Payload = nil
+	if m == nil || m.Header == nil {
+		return ErrNilMessage
 	}
+	if err := m.Header.validate(MsgTypeModifyAccessBearersRequest, m.MarshalLen()); err != nil {
+		return err
+	}
+	if len(b) < m.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	m.Header.Payload = nil
 	m.Header.Payload = make([]byte, m.MarshalLen()-m.Header.MarshalLen())
-
 	offset := 0
-	if ie := m.IndicationFlags; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
+	if i := m.IndicationFlags; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "IndicationFlags", iePair{ie.Indication, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := m.SenderFTEIDC; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
+	if i := m.SenderFTEIDC; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "SenderFTEIDC", iePair{ie.FullyQualifiedTEID, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := m.DelayDownlinkPacketNotificationRequest; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
+	if i := m.DelayDownlinkPacketNotificationRequest; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "DelayDownlinkPacketNotificationRequest", iePair{ie.DelayValue, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	for _, ie := range m.BearerContextsToBeModified {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	for _, ie := range m.BearerContextsToBeRemoved {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := m.Recovery; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	for _, ie := range m.SecondaryRATUsageDataReport {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := m.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range m.AdditionalIEs {
-		if ie == nil {
+	for _, i := range m.BearerContextsToBeModified {
+		if i == nil {
 			continue
 		}
-		if err := ie.MarshalTo(m.Header.Payload[offset:]); err != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "BearerContextsToBeModified", iePair{ie.BearerContext, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
+	for _, i := range m.BearerContextsToBeRemoved {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, m.Payload[offset:], "BearerContextsToBeRemoved", iePair{ie.BearerContext, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := m.Recovery; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "Recovery", iePair{ie.Recovery, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range m.SecondaryRATUsageDataReport {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, m.Payload[offset:], "SecondaryRATUsageDataReport", iePair{ie.SecondaryRATUsageDataReport, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := m.PrivateExtension; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "PrivateExtension", iePair{ie.PrivateExtension, 255}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range m.AdditionalIEs {
+		if i == nil {
+			continue
+		}
+		if err := i.MarshalTo(m.Payload[offset:]); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
 	m.Header.SetLength()
 	return m.Header.MarshalTo(b)
 }
@@ -146,6 +134,9 @@ func (m *ModifyAccessBearersRequest) MarshalTo(b []byte) error {
 func ParseModifyAccessBearersRequest(b []byte) (*ModifyAccessBearersRequest, error) {
 	m := &ModifyAccessBearersRequest{}
 	if err := m.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return m, err
+		}
 		return nil, err
 	}
 	return m, nil
@@ -153,91 +144,74 @@ func ParseModifyAccessBearersRequest(b []byte) (*ModifyAccessBearersRequest, err
 
 // UnmarshalBinary decodes given bytes as ModifyAccessBearersRequest.
 func (m *ModifyAccessBearersRequest) UnmarshalBinary(b []byte) error {
-	var err error
-	m.Header, err = ParseHeader(b)
+	if m == nil {
+		return ErrNilMessage
+	}
+	*m = ModifyAccessBearersRequest{}
+	h, err := ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(m.Header.Payload) < 2 {
-		return nil
+	if h.Type != MsgTypeModifyAccessBearersRequest {
+		return &UnexpectedTypeError{Expected: MsgTypeModifyAccessBearersRequest, Actual: h.Type}
 	}
-
-	decodedIEs, err := ie.ParseMultiIEs(m.Header.Payload)
+	m.Header = h
+	decodedIEs, err := parseMessageIEs(h)
 	if err != nil {
 		return err
 	}
-	for _, i := range decodedIEs {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.Indication:
-			m.IndicationFlags = i
-		case ie.NodeType:
-			m.SenderFTEIDC = i
-		case ie.DelayValue:
-			m.DelayDownlinkPacketNotificationRequest = i
-		case ie.BearerContext:
-			switch i.Instance() {
-			case 0:
-				m.BearerContextsToBeModified = append(m.BearerContextsToBeModified, i)
-			case 1:
-				m.BearerContextsToBeRemoved = append(m.BearerContextsToBeRemoved, i)
-			}
-		case ie.Recovery:
-			m.Recovery = i
-		case ie.SecondaryRATUsageDataReport:
-			m.SecondaryRATUsageDataReport = append(m.SecondaryRATUsageDataReport, i)
-		case ie.PrivateExtension:
-			m.PrivateExtension = i
-		default:
-			m.AdditionalIEs = append(m.AdditionalIEs, i)
-		}
-	}
-
-	return nil
+	return addDecodedIEs(h, decodedIEs, m.addIE)
 }
 
 // MarshalLen returns the serial length in int.
 func (m *ModifyAccessBearersRequest) MarshalLen() int {
+	if m == nil || m.Header == nil {
+		return 0
+	}
 	l := m.Header.MarshalLen() - len(m.Header.Payload)
-	if ie := m.IndicationFlags; ie != nil {
-		l += ie.MarshalLen()
+	if i := m.IndicationFlags; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := m.SenderFTEIDC; ie != nil {
-		l += ie.MarshalLen()
+	if i := m.SenderFTEIDC; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := m.DelayDownlinkPacketNotificationRequest; ie != nil {
-		l += ie.MarshalLen()
+	if i := m.DelayDownlinkPacketNotificationRequest; i != nil {
+		l += i.MarshalLen()
 	}
-	for _, ie := range m.BearerContextsToBeModified {
-		l += ie.MarshalLen()
-	}
-	for _, ie := range m.BearerContextsToBeRemoved {
-		l += ie.MarshalLen()
-	}
-	if ie := m.Recovery; ie != nil {
-		l += ie.MarshalLen()
-	}
-	for _, ie := range m.SecondaryRATUsageDataReport {
-		l += ie.MarshalLen()
-	}
-	if ie := m.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
-	}
-
-	for _, ie := range m.AdditionalIEs {
-		if ie == nil {
-			continue
+	for _, i := range m.BearerContextsToBeModified {
+		if i != nil {
+			l += i.MarshalLen()
 		}
-		l += ie.MarshalLen()
+	}
+	for _, i := range m.BearerContextsToBeRemoved {
+		if i != nil {
+			l += i.MarshalLen()
+		}
+	}
+	if i := m.Recovery; i != nil {
+		l += i.MarshalLen()
+	}
+	for _, i := range m.SecondaryRATUsageDataReport {
+		if i != nil {
+			l += i.MarshalLen()
+		}
+	}
+	if i := m.PrivateExtension; i != nil {
+		l += i.MarshalLen()
+	}
+	for _, i := range m.AdditionalIEs {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
 	return l
 }
 
 // SetLength sets the length in Length field.
 func (m *ModifyAccessBearersRequest) SetLength() {
-	m.Header.Length = uint16(m.MarshalLen() - 4)
+	if m != nil && m.Header != nil {
+		m.Header.setLength(m.MarshalLen() - m.Header.piggybackLen() - 4)
+	}
 }
 
 // MessageTypeName returns the name of protocol.
@@ -247,5 +221,128 @@ func (m *ModifyAccessBearersRequest) MessageTypeName() string {
 
 // TEID returns the TEID in uint32.
 func (m *ModifyAccessBearersRequest) TEID() uint32 {
+	if m == nil {
+		return 0
+	}
 	return m.Header.teid()
+}
+
+func (m *ModifyAccessBearersRequest) GetHeader() *Header {
+	if m == nil {
+		return nil
+	}
+	return m.Header
+}
+
+// TS 29.274 Table 7.2.24-1: identify IEs by type and instance; §7.7.10: keep the first singleton.
+func (m *ModifyAccessBearersRequest) addIE(i *ie.IE) {
+	if i == nil {
+		return
+	}
+	if err := i.Err(); err != nil {
+		m.Header.err = err
+	}
+	switch i.Type {
+	case ie.Indication:
+		switch i.Instance() {
+		case 0:
+			if m.IndicationFlags == nil {
+				m.IndicationFlags = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.FullyQualifiedTEID:
+		switch i.Instance() {
+		case 0:
+			if m.SenderFTEIDC == nil {
+				m.SenderFTEIDC = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.DelayValue:
+		switch i.Instance() {
+		case 0:
+			if m.DelayDownlinkPacketNotificationRequest == nil {
+				m.DelayDownlinkPacketNotificationRequest = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.BearerContext:
+		switch i.Instance() {
+		case 0:
+			m.BearerContextsToBeModified = append(m.BearerContextsToBeModified, i)
+		case 1:
+			m.BearerContextsToBeRemoved = append(m.BearerContextsToBeRemoved, i)
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.Recovery:
+		switch i.Instance() {
+		case 0:
+			if m.Recovery == nil {
+				m.Recovery = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.SecondaryRATUsageDataReport:
+		switch i.Instance() {
+		case 0:
+			m.SecondaryRATUsageDataReport = append(m.SecondaryRATUsageDataReport, i)
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.PrivateExtension:
+		if m.PrivateExtension == nil {
+			m.PrivateExtension = i
+		} else if m.PrivateExtension.Instance() != i.Instance() {
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	default:
+		m.AdditionalIEs = append(m.AdditionalIEs, i)
+	}
+}
+
+// Version reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersRequest) Version() int { return m.GetHeader().Version() }
+
+// MessageType reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersRequest) MessageType() uint8 { return m.GetHeader().MessageType() }
+
+// Sequence reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersRequest) Sequence() uint32 { return m.GetHeader().Sequence() }
+
+// IsPiggybacking reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersRequest) IsPiggybacking() bool { return m.GetHeader().IsPiggybacking() }
+
+// HasTEID reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersRequest) HasTEID() bool { return m.GetHeader().HasTEID() }
+
+// HasMessagePriority reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersRequest) HasMessagePriority() bool {
+	return m.GetHeader().HasMessagePriority()
+}
+
+// MessagePriority reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersRequest) MessagePriority() uint8 { return m.GetHeader().MessagePriority() }
+
+// SetSequenceNumber updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersRequest) SetSequenceNumber(seq uint32) error {
+	return m.GetHeader().SetSequenceNumber(seq)
+}
+
+// SetMessagePriority updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersRequest) SetMessagePriority(priority uint8) error {
+	return m.GetHeader().SetMessagePriority(priority)
+}
+
+// SetTEID updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersRequest) SetTEID(teid uint32) { m.GetHeader().SetTEID(teid) }
+
+// SetPiggybacking updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersRequest) SetPiggybacking(value uint8) {
+	m.GetHeader().SetPiggybacking(value)
 }

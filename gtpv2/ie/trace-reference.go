@@ -38,6 +38,9 @@ func NewTraceReferenceFields(mcc, mnc string, traceID uint32) *TraceReferenceFie
 
 // Marshal serializes TraceReferenceFields.
 func (f *TraceReferenceFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -48,6 +51,12 @@ func (f *TraceReferenceFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes TraceReferenceFields.
 func (f *TraceReferenceFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
@@ -83,6 +92,10 @@ func ParseTraceReferenceFields(b []byte) (*TraceReferenceFields, error) {
 
 // UnmarshalBinary decodes given bytes into TraceReferenceFields.
 func (f *TraceReferenceFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = TraceReferenceFields{}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
@@ -104,6 +117,9 @@ func (f *TraceReferenceFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of TraceReferenceFields in int.
 func (f *TraceReferenceFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 6
 }
 
@@ -126,6 +142,9 @@ func (i *IE) TraceID() (uint32, error) {
 // MustTraceID returns TraceID in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustTraceID() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.TraceID()
 	return v
 }

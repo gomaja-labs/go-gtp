@@ -36,8 +36,9 @@ func (i *IE) BearerQoS() (*BearerQoSFields, error) {
 			return nil, fmt.Errorf("failed to retrieve BearerQoS: %w", err)
 		}
 
+		// TS 29.274 §7.7.9: match the child type and instance together.
 		for _, child := range ies {
-			if child.Type == BearerQoS {
+			if child != nil && child.Type == BearerQoS && child.Instance() == 0 {
 				return child.BearerQoS()
 			}
 		}
@@ -49,6 +50,7 @@ func (i *IE) BearerQoS() (*BearerQoSFields, error) {
 
 // BearerQoSFields is a set of fields in BearerQoS IE.
 type BearerQoSFields struct {
+	err                          error
 	ARP                          uint8
 	QCI                          uint8
 	MaximumBitRateForUplink      uint64 // 40 bits
@@ -59,6 +61,9 @@ type BearerQoSFields struct {
 
 // NewBearerQoSFields creates a new BearerQoSFields.
 func NewBearerQoSFields(pci, pl, pvi, qci uint8, umbr, dmbr, ugbr, dgbr uint64) *BearerQoSFields {
+	if pci > 1 || pl > 15 || pvi > 1 {
+		return &BearerQoSFields{err: ErrMalformed}
+	}
 	return &BearerQoSFields{
 		ARP:                          (pci << 6 & 0x40) | (pl << 2 & 0x3c) | (pvi & 0x01),
 		QCI:                          qci,
@@ -71,6 +76,9 @@ func NewBearerQoSFields(pci, pl, pvi, qci uint8, umbr, dmbr, ugbr, dgbr uint64) 
 
 // Marshal serializes BearerQoSFields.
 func (f *BearerQoSFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -81,6 +89,15 @@ func (f *BearerQoSFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes BearerQoSFields.
 func (f *BearerQoSFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if f.err != nil {
+		return f.err
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	if len(b) < 22 {
 		return io.ErrUnexpectedEOF
 	}
@@ -124,6 +141,10 @@ func ParseBearerQoSFields(b []byte) (*BearerQoSFields, error) {
 
 // UnmarshalBinary decodes given bytes into BearerQoSFields.
 func (f *BearerQoSFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = BearerQoSFields{}
 	if len(b) < 22 {
 		return io.ErrUnexpectedEOF
 	}
@@ -141,6 +162,9 @@ func (f *BearerQoSFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of BearerQoSFields in int.
 func (f *BearerQoSFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 22
 }
 
@@ -187,6 +211,9 @@ func (i *IE) MBRForUplink() (uint64, error) {
 // MustMBRForUplink returns MBRForUplink in uint64, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMBRForUplink() uint64 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.MBRForUplink()
 	return v
 }
@@ -215,6 +242,9 @@ func (i *IE) MBRForDownlink() (uint64, error) {
 // MustMBRForDownlink returns MBRForDownlink in uint64, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMBRForDownlink() uint64 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.MBRForDownlink()
 	return v
 }
@@ -243,6 +273,9 @@ func (i *IE) GBRForUplink() (uint64, error) {
 // MustGBRForUplink returns GBRForUplink in uint64, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustGBRForUplink() uint64 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.GBRForUplink()
 	return v
 }
@@ -271,6 +304,9 @@ func (i *IE) GBRForDownlink() (uint64, error) {
 // MustGBRForDownlink returns GBRForDownlink in uint64, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustGBRForDownlink() uint64 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.GBRForDownlink()
 	return v
 }

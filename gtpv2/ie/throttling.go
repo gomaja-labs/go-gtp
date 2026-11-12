@@ -14,7 +14,7 @@ func NewThrottling(delay time.Duration, factor uint8) *IE {
 	v := NewThrottlingFields(delay, factor)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(Throttling, err)
 	}
 
 	return New(Throttling, 0x00, b)
@@ -22,6 +22,9 @@ func NewThrottling(delay time.Duration, factor uint8) *IE {
 
 // Throttling returns Throttling in time.Duration if the type of IE matches.
 func (i *IE) Throttling() (*ThrottlingFields, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case Throttling:
 		return ParseThrottlingFields(i.Payload)
@@ -39,46 +42,15 @@ type ThrottlingFields struct {
 
 // NewThrottlingFields creates a new ThrottlingFields.
 func NewThrottlingFields(delay time.Duration, factor uint8) *ThrottlingFields {
-	// 8.85 Throttling
-	// Bits 5 to 1 represent the binary coded timer value.
-	// Bits 6 to 8 defines the timer value unit as follows:
-	// Bits
-	// 8 7 6
-	// 0 0 0 value is incremented in multiples of 2 seconds
-	// 0 0 1 value is incremented in multiples of 1 minute
-	// 0 1 0 value is incremented in multiples of 10 minutes
-	// 0 1 1 value is incremented in multiples of 1 hour
-	// 1 0 0 value is incremented in multiples of 10 hours
-	// 1 1 1 value indicates that the timer is infinite
-	//
-	// Other values shall be interpreted as multiples of 1 minute in this version of the protocol.
-	// Timer unit and Timer value both set to all "zeros" shall be interpreted as an indication that the timer is stopped.
-
-	var unit uint8
-	switch {
-	case delay%(10*time.Hour) == 0:
-		unit = 0x04
-	case delay%(1*time.Hour) == 0:
-		unit = 0x03
-	case delay%(10*time.Minute) == 0:
-		unit = 0x02
-	case delay%(1*time.Minute) == 0:
-		unit = 0x01
-	case delay%(2*time.Second) == 0:
-		unit = 0x00
-	default:
-		unit = 0xe0
-	}
-
-	return &ThrottlingFields{
-		DelayUnit:  unit,
-		DelayValue: delay,
-		Factor:     factor,
-	}
+	raw, _ := encodeTimer(delay)
+	return &ThrottlingFields{DelayUnit: raw >> 5, DelayValue: delay, Factor: factor}
 }
 
 // Marshal serializes ThrottlingFields.
 func (f *ThrottlingFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -89,28 +61,26 @@ func (f *ThrottlingFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes ThrottlingFields.
 func (f *ThrottlingFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
 	}
 
-	var value uint8
-	switch f.DelayUnit {
-	case 0x04:
-		value = uint8(f.DelayValue / (10 * time.Hour))
-	case 0x03:
-		value = uint8(f.DelayValue / time.Hour)
-	case 0x02:
-		value = uint8(f.DelayValue / (10 * time.Minute))
-	case 0x01:
-		value = uint8(f.DelayValue / time.Minute)
-	case 0x00:
-		value = uint8(f.DelayValue / (2 * time.Second))
-	default:
-		value = 0
+	// TS 29.274 §8.85: reserved factors shall not be transmitted.
+	if f.Factor > 100 {
+		return ErrMalformed
 	}
-
-	b[0] = ((f.DelayUnit << 5) & 0xe0) | (value & 0x1f)
+	raw, err := encodeTimer(f.DelayValue)
+	if err != nil {
+		return err
+	}
+	b[0] = raw
 	b[1] = f.Factor
 
 	return nil
@@ -128,6 +98,10 @@ func ParseThrottlingFields(b []byte) (*ThrottlingFields, error) {
 
 // UnmarshalBinary decodes given bytes into ThrottlingFields.
 func (f *ThrottlingFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = ThrottlingFields{}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
@@ -142,20 +116,26 @@ func (f *ThrottlingFields) UnmarshalBinary(b []byte) error {
 		f.DelayValue = time.Duration(b[0]&0x1f) * time.Hour
 	case 0x02:
 		f.DelayValue = time.Duration(b[0]&0x1f) * (10 * time.Minute)
-	case 0x01:
+	case 0x01, 0x05, 0x06:
 		f.DelayValue = time.Duration(b[0]&0x1f) * time.Minute
 	case 0x00:
 		f.DelayValue = time.Duration(b[0]&0x1f) * (2 * time.Second)
-	default:
-		f.DelayValue = 0
+	case 0x07:
+		f.DelayValue = time.Duration(1<<63 - 1)
 	}
 
 	f.Factor = b[1]
+	if f.Factor > 100 {
+		f.Factor = 0
+	}
 
 	return nil
 }
 
 // MarshalLen returns the serial length of ThrottlingFields in int.
 func (f *ThrottlingFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 2
 }

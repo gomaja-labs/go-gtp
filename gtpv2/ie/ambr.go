@@ -14,7 +14,7 @@ func NewAggregateMaximumBitRate(up, down uint32) *IE {
 	v := NewAggregateMaximumBitRateFields(up, down)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(AggregateMaximumBitRate, err)
 	}
 
 	return New(AggregateMaximumBitRate, 0x00, b)
@@ -22,6 +22,9 @@ func NewAggregateMaximumBitRate(up, down uint32) *IE {
 
 // AggregateMaximumBitRate returns AggregateMaximumBitRate in AggregateMaximumBitRateFields type if the type of IE matches.
 func (i *IE) AggregateMaximumBitRate() (*AggregateMaximumBitRateFields, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case AggregateMaximumBitRate:
 		return ParseAggregateMaximumBitRateFields(i.Payload)
@@ -46,6 +49,9 @@ func NewAggregateMaximumBitRateFields(up, down uint32) *AggregateMaximumBitRateF
 
 // Marshal serializes AggregateMaximumBitRateFields.
 func (f *AggregateMaximumBitRateFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -56,6 +62,12 @@ func (f *AggregateMaximumBitRateFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes AggregateMaximumBitRateFields.
 func (f *AggregateMaximumBitRateFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	if len(b) < 8 {
 		return io.ErrUnexpectedEOF
 	}
@@ -78,6 +90,10 @@ func ParseAggregateMaximumBitRateFields(b []byte) (*AggregateMaximumBitRateField
 
 // UnmarshalBinary decodes given bytes into AggregateMaximumBitRateFields.
 func (f *AggregateMaximumBitRateFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = AggregateMaximumBitRateFields{}
 	if len(b) < 8 {
 		return io.ErrUnexpectedEOF
 	}
@@ -90,12 +106,18 @@ func (f *AggregateMaximumBitRateFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of AggregateMaximumBitRateFields in int.
 func (f *AggregateMaximumBitRateFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 8
 }
 
 // AggregateMaximumBitRateUp returns AggregateMaximumBitRate for Uplink
 // if the type of IE matches.
 func (i *IE) AggregateMaximumBitRateUp() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != AggregateMaximumBitRate {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -109,6 +131,9 @@ func (i *IE) AggregateMaximumBitRateUp() (uint32, error) {
 // MustAggregateMaximumBitRateUp returns AggregateMaximumBitRateUp in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustAggregateMaximumBitRateUp() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.AggregateMaximumBitRateUp()
 	return v
 }
@@ -116,6 +141,9 @@ func (i *IE) MustAggregateMaximumBitRateUp() uint32 {
 // AggregateMaximumBitRateDown returns AggregateMaximumBitRate for Downlink
 // if the type of IE matches.
 func (i *IE) AggregateMaximumBitRateDown() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != AggregateMaximumBitRate {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -129,6 +157,9 @@ func (i *IE) AggregateMaximumBitRateDown() (uint32, error) {
 // MustAggregateMaximumBitRateDown returns AggregateMaximumBitRateDown in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustAggregateMaximumBitRateDown() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.AggregateMaximumBitRateDown()
 	return v
 }

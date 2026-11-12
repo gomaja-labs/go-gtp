@@ -77,6 +77,7 @@ func setup(ctx context.Context, doneCh chan struct{}) (cliConn, srvConn *gtpv2.C
 				srvConn.RegisterSession(fTEID.MustTEID(), session)
 				csRsp := message.NewCreateSessionResponse(
 					otei, msg.Sequence(), ie.NewCause(gtpv2.CauseRequestAccepted, 0, 0, 0, nil), fTEID,
+					ie.NewBearerContext(ie.NewEPSBearerID(5), ie.NewCause(gtpv2.CauseRequestAccepted, 0, 0, 0, nil)),
 				)
 				if err := c.RespondTo(cliAddr, csReq, csRsp); err != nil {
 					return err
@@ -125,6 +126,11 @@ func TestCreateSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Dial's ctx only bounds the handshake; close both ends explicitly.
+	t.Cleanup(func() {
+		_ = cliConn.Close()
+		_ = srvConn.Close()
+	})
 
 	cliConn.AddHandler(
 		message.MsgTypeCreateSessionResponse,
@@ -136,7 +142,7 @@ func TestCreateSession(t *testing.T) {
 				t.Errorf("invalid sequence number. got: %d, want: %d", msg.Sequence(), cliConn.SequenceNumber())
 			}
 
-			session, err := c.GetSessionByTEID(msg.TEID(), srvAddr)
+			session, err := c.GetSessionByTEID(msg.TEID())
 			if err != nil {
 				return err
 			}
@@ -192,7 +198,7 @@ func TestCreateSession(t *testing.T) {
 	)
 
 	fTEID := cliConn.NewSenderFTEID("127.0.0.1", "")
-	_, _, err = cliConn.CreateSession(srvConn.LocalAddr(), ie.NewIMSI("123451234567890"), fTEID)
+	_, _, err = cliConn.CreateSession(srvConn.LocalAddr(), ie.NewIMSI("123451234567890"), fTEID, ie.NewRATType(gtpv2.RATTypeEUTRAN), ie.NewAccessPointName("internet"), ie.NewBearerContext(ie.NewEPSBearerID(5), ie.NewBearerQoS(0, 1, 0, 9, 0, 0, 0, 0)))
 	if err != nil {
 		t.Fatal(err)
 	}

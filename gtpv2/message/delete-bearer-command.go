@@ -31,34 +31,7 @@ func NewDeleteBearerCommand(teid, seq uint32, ies ...*ie.IE) *DeleteBearerComman
 	}
 
 	for _, i := range ies {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.BearerContext:
-			d.BearerContexts = append(d.BearerContexts, i)
-		case ie.UserLocationInformation:
-			d.ULI = i
-		case ie.ULITimestamp:
-			d.ULITimestamp = i
-		case ie.UETimeZone:
-			d.UETimeZone = i
-		case ie.OverloadControlInformation:
-			switch i.Instance() {
-			case 0:
-				d.MMESGSNOverloadControlInformation = i
-			case 1:
-				d.SGWOverloadControlInformation = i
-			}
-		case ie.FullyQualifiedTEID:
-			d.SenderFTEIDC = i
-		case ie.SecondaryRATUsageDataReport:
-			d.SecondaryRATDataUsageReport = append(d.SecondaryRATDataUsageReport, i)
-		case ie.PrivateExtension:
-			d.PrivateExtension = i
-		default:
-			d.AdditionalIEs = append(d.AdditionalIEs, i)
-		}
+		d.addIE(i)
 	}
 
 	d.SetLength()
@@ -76,77 +49,87 @@ func (d *DeleteBearerCommand) Marshal() ([]byte, error) {
 
 // MarshalTo serializes DeleteBearerCommand into bytes.
 func (d *DeleteBearerCommand) MarshalTo(b []byte) error {
-	if d.Header.Payload != nil {
-		d.Header.Payload = nil
+	if d == nil || d.Header == nil {
+		return ErrNilMessage
 	}
+	if err := d.Header.validate(MsgTypeDeleteBearerCommand, d.MarshalLen()); err != nil {
+		return err
+	}
+	if len(b) < d.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	d.Header.Payload = nil
 	d.Header.Payload = make([]byte, d.MarshalLen()-d.Header.MarshalLen())
-
 	offset := 0
-	for _, ie := range d.BearerContexts {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.ULI; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.ULITimestamp; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.UETimeZone; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.MMESGSNOverloadControlInformation; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.SGWOverloadControlInformation; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.SenderFTEIDC; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	for _, ie := range d.SecondaryRATDataUsageReport {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := d.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(d.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range d.AdditionalIEs {
-		if ie == nil {
+	for _, i := range d.BearerContexts {
+		if i == nil {
 			continue
 		}
-		if err := ie.MarshalTo(d.Header.Payload[offset:]); err != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "BearerContexts", iePair{ie.BearerContext, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
+	if i := d.ULI; i != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "ULI", iePair{ie.UserLocationInformation, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := d.ULITimestamp; i != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "ULITimestamp", iePair{ie.ULITimestamp, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := d.UETimeZone; i != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "UETimeZone", iePair{ie.UETimeZone, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := d.MMESGSNOverloadControlInformation; i != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "MMESGSNOverloadControlInformation", iePair{ie.OverloadControlInformation, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := d.SGWOverloadControlInformation; i != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "SGWOverloadControlInformation", iePair{ie.OverloadControlInformation, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := d.SenderFTEIDC; i != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "SenderFTEIDC", iePair{ie.FullyQualifiedTEID, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range d.SecondaryRATDataUsageReport {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, d.Payload[offset:], "SecondaryRATDataUsageReport", iePair{ie.SecondaryRATUsageDataReport, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := d.PrivateExtension; i != nil {
+		if err := marshalNamedIE(i, d.Payload[offset:], "PrivateExtension", iePair{ie.PrivateExtension, 255}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range d.AdditionalIEs {
+		if i == nil {
+			continue
+		}
+		if err := i.MarshalTo(d.Payload[offset:]); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
 	d.Header.SetLength()
 	return d.Header.MarshalTo(b)
 }
@@ -155,6 +138,9 @@ func (d *DeleteBearerCommand) MarshalTo(b []byte) error {
 func ParseDeleteBearerCommand(b []byte) (*DeleteBearerCommand, error) {
 	d := &DeleteBearerCommand{}
 	if err := d.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return d, err
+		}
 		return nil, err
 	}
 	return d, nil
@@ -162,96 +148,75 @@ func ParseDeleteBearerCommand(b []byte) (*DeleteBearerCommand, error) {
 
 // UnmarshalBinary decodes given bytes as DeleteBearerCommand.
 func (d *DeleteBearerCommand) UnmarshalBinary(b []byte) error {
-	var err error
-	d.Header, err = ParseHeader(b)
+	if d == nil {
+		return ErrNilMessage
+	}
+	*d = DeleteBearerCommand{}
+	h, err := ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(d.Header.Payload) < 2 {
-		return nil
+	if h.Type != MsgTypeDeleteBearerCommand {
+		return &UnexpectedTypeError{Expected: MsgTypeDeleteBearerCommand, Actual: h.Type}
 	}
-
-	decodedIEs, err := ie.ParseMultiIEs(d.Header.Payload)
+	d.Header = h
+	decodedIEs, err := parseMessageIEs(h)
 	if err != nil {
 		return err
 	}
-	for _, i := range decodedIEs {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.BearerContext:
-			d.BearerContexts = append(d.BearerContexts, i)
-		case ie.UserLocationInformation:
-			d.ULI = i
-		case ie.ULITimestamp:
-			d.ULITimestamp = i
-		case ie.UETimeZone:
-			d.UETimeZone = i
-		case ie.OverloadControlInformation:
-			switch i.Instance() {
-			case 0:
-				d.MMESGSNOverloadControlInformation = i
-			case 1:
-				d.SGWOverloadControlInformation = i
-			}
-		case ie.FullyQualifiedTEID:
-			d.SenderFTEIDC = i
-		case ie.SecondaryRATUsageDataReport:
-			d.SecondaryRATDataUsageReport = append(d.SecondaryRATDataUsageReport, i)
-		case ie.PrivateExtension:
-			d.PrivateExtension = i
-		default:
-			d.AdditionalIEs = append(d.AdditionalIEs, i)
-		}
-	}
-
-	return nil
+	return addDecodedIEs(h, decodedIEs, d.addIE)
 }
 
 // MarshalLen returns the serial length in int.
 func (d *DeleteBearerCommand) MarshalLen() int {
+	if d == nil || d.Header == nil {
+		return 0
+	}
 	l := d.Header.MarshalLen() - len(d.Header.Payload)
-	for _, ie := range d.BearerContexts {
-		l += ie.MarshalLen()
-	}
-	if ie := d.ULI; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.ULITimestamp; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.UETimeZone; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.MMESGSNOverloadControlInformation; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.SGWOverloadControlInformation; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := d.SenderFTEIDC; ie != nil {
-		l += ie.MarshalLen()
-	}
-	for _, ie := range d.SecondaryRATDataUsageReport {
-		l += ie.MarshalLen()
-	}
-	if ie := d.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
-	}
-
-	for _, ie := range d.AdditionalIEs {
-		if ie == nil {
-			continue
+	for _, i := range d.BearerContexts {
+		if i != nil {
+			l += i.MarshalLen()
 		}
-		l += ie.MarshalLen()
+	}
+	if i := d.ULI; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := d.ULITimestamp; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := d.UETimeZone; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := d.MMESGSNOverloadControlInformation; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := d.SGWOverloadControlInformation; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := d.SenderFTEIDC; i != nil {
+		l += i.MarshalLen()
+	}
+	for _, i := range d.SecondaryRATDataUsageReport {
+		if i != nil {
+			l += i.MarshalLen()
+		}
+	}
+	if i := d.PrivateExtension; i != nil {
+		l += i.MarshalLen()
+	}
+	for _, i := range d.AdditionalIEs {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
 	return l
 }
 
 // SetLength sets the length in Length field.
 func (d *DeleteBearerCommand) SetLength() {
-	d.Header.Length = uint16(d.MarshalLen() - 4)
+	if d != nil && d.Header != nil {
+		d.Header.setLength(d.MarshalLen() - d.Header.piggybackLen() - 4)
+	}
 }
 
 // MessageTypeName returns the name of protocol.
@@ -261,5 +226,135 @@ func (d *DeleteBearerCommand) MessageTypeName() string {
 
 // TEID returns the TEID in uint32.
 func (d *DeleteBearerCommand) TEID() uint32 {
+	if d == nil {
+		return 0
+	}
 	return d.Header.teid()
 }
+
+func (d *DeleteBearerCommand) GetHeader() *Header {
+	if d == nil {
+		return nil
+	}
+	return d.Header
+}
+
+// TS 29.274 Table 7.2.17.1-1: identify IEs by type and instance; §7.7.10: keep the first singleton.
+func (d *DeleteBearerCommand) addIE(i *ie.IE) {
+	if i == nil {
+		return
+	}
+	if err := i.Err(); err != nil {
+		d.Header.err = err
+	}
+	switch i.Type {
+	case ie.BearerContext:
+		switch i.Instance() {
+		case 0:
+			d.BearerContexts = append(d.BearerContexts, i)
+		default:
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	case ie.UserLocationInformation:
+		switch i.Instance() {
+		case 0:
+			if d.ULI == nil {
+				d.ULI = i
+			}
+		default:
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	case ie.ULITimestamp:
+		switch i.Instance() {
+		case 0:
+			if d.ULITimestamp == nil {
+				d.ULITimestamp = i
+			}
+		default:
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	case ie.UETimeZone:
+		switch i.Instance() {
+		case 0:
+			if d.UETimeZone == nil {
+				d.UETimeZone = i
+			}
+		default:
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	case ie.OverloadControlInformation:
+		switch i.Instance() {
+		case 0:
+			if d.MMESGSNOverloadControlInformation == nil {
+				d.MMESGSNOverloadControlInformation = i
+			}
+		case 1:
+			if d.SGWOverloadControlInformation == nil {
+				d.SGWOverloadControlInformation = i
+			}
+		default:
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	case ie.FullyQualifiedTEID:
+		switch i.Instance() {
+		case 0:
+			if d.SenderFTEIDC == nil {
+				d.SenderFTEIDC = i
+			}
+		default:
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	case ie.SecondaryRATUsageDataReport:
+		switch i.Instance() {
+		case 0:
+			d.SecondaryRATDataUsageReport = append(d.SecondaryRATDataUsageReport, i)
+		default:
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	case ie.PrivateExtension:
+		if d.PrivateExtension == nil {
+			d.PrivateExtension = i
+		} else if d.PrivateExtension.Instance() != i.Instance() {
+			d.AdditionalIEs = append(d.AdditionalIEs, i)
+		}
+	default:
+		d.AdditionalIEs = append(d.AdditionalIEs, i)
+	}
+}
+
+// Version reads the common header, returning zero for a nil receiver.
+func (d *DeleteBearerCommand) Version() int { return d.GetHeader().Version() }
+
+// MessageType reads the common header, returning zero for a nil receiver.
+func (d *DeleteBearerCommand) MessageType() uint8 { return d.GetHeader().MessageType() }
+
+// Sequence reads the common header, returning zero for a nil receiver.
+func (d *DeleteBearerCommand) Sequence() uint32 { return d.GetHeader().Sequence() }
+
+// IsPiggybacking reads the common header, returning zero for a nil receiver.
+func (d *DeleteBearerCommand) IsPiggybacking() bool { return d.GetHeader().IsPiggybacking() }
+
+// HasTEID reads the common header, returning zero for a nil receiver.
+func (d *DeleteBearerCommand) HasTEID() bool { return d.GetHeader().HasTEID() }
+
+// HasMessagePriority reads the common header, returning zero for a nil receiver.
+func (d *DeleteBearerCommand) HasMessagePriority() bool { return d.GetHeader().HasMessagePriority() }
+
+// MessagePriority reads the common header, returning zero for a nil receiver.
+func (d *DeleteBearerCommand) MessagePriority() uint8 { return d.GetHeader().MessagePriority() }
+
+// SetSequenceNumber updates the common header safely on a nil receiver.
+func (d *DeleteBearerCommand) SetSequenceNumber(seq uint32) error {
+	return d.GetHeader().SetSequenceNumber(seq)
+}
+
+// SetMessagePriority updates the common header safely on a nil receiver.
+func (d *DeleteBearerCommand) SetMessagePriority(priority uint8) error {
+	return d.GetHeader().SetMessagePriority(priority)
+}
+
+// SetTEID updates the common header safely on a nil receiver.
+func (d *DeleteBearerCommand) SetTEID(teid uint32) { d.GetHeader().SetTEID(teid) }
+
+// SetPiggybacking updates the common header safely on a nil receiver.
+func (d *DeleteBearerCommand) SetPiggybacking(value uint8) { d.GetHeader().SetPiggybacking(value) }

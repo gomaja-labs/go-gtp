@@ -12,6 +12,10 @@ import (
 
 // NewIMSI creates a new IMSI IE.
 func NewIMSI(imsi string) *IE {
+	// TS 29.274 §8.3: identity digit count.
+	if len(imsi) == 0 || len(imsi) > 15 {
+		return newErrorIE(IMSI, ErrInvalidLength)
+	}
 	i, err := utils.EncodeBCDDigits(imsi)
 	if err != nil {
 		return newErrorIE(IMSI, err)
@@ -32,12 +36,26 @@ func (i *IE) IMSI() (string, error) {
 		return "", io.ErrUnexpectedEOF
 	}
 
-	return utils.DecodeBCDDigits(i.Payload)
+	v, err := utils.DecodeBCDDigits(i.Payload)
+	if err != nil {
+		return "", err
+	}
+	if len(v) == 0 || len(v) > 15 {
+		return "", ErrInvalidLength
+	}
+	// TS 29.274 §§8.3, 8.10: only one trailing high-nibble filler.
+	if (len(v)+1)/2 != len(i.Payload) {
+		return "", ErrMalformed
+	}
+	return v, nil
 }
 
 // MustIMSI returns IMSI in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustIMSI() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.IMSI()
 	return v
 }

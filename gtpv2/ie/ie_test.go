@@ -356,7 +356,7 @@ var cases = []struct {
 		},
 	}, {
 		"BearerTFT/TFTOpDeletePacketFilters/NoParams",
-		ie.NewBearerTFTDeletePacketFilters([]uint8{1, 2, 3, 4}, nil),
+		ie.NewBearerTFTDeletePacketFilters([]uint8{1, 2, 3, 4}),
 		[]byte{0x54, 0x00, 0x05, 0x00, 0xa4, 0x01, 0x02, 0x03, 0x04},
 	}, {
 		"BearerTFT/TFTOpDeletePacketFilters/WithParams",
@@ -374,12 +374,12 @@ var cases = []struct {
 			0x03, 0x04, 0x01, 0x02, 0x03, 0x04,
 		},
 	}, {
-		"BearerTFT/TFTOpNoTFTOperation/NoParams",
-		ie.NewBearerTFTNoTFTOperation(),
-		[]byte{0x54, 0x00, 0x01, 0x00, 0xc0},
+		"BearerTFT/TFTOpNoTFTOperation/WithParams",
+		ie.NewBearerTFTNoTFTOperation(ie.NewTFTParameter(ie.TFTParamIDPacketFileterIdentifier, []byte{1})),
+		[]byte{0x54, 0x00, 0x04, 0x00, 0xd0, 3, 1, 1},
 	}, {
 		"UserLocationInformation/Partial",
-		ie.NewUserLocationInformationStruct(
+		ie.NewUserLocationInformation(
 			ie.NewCGI("123", "45", 0x1111, 0x2222),
 			ie.NewSAI("123", "45", 0x1111, 0x3333),
 			nil,
@@ -387,7 +387,7 @@ var cases = []struct {
 			ie.NewECGI("123", "45", 0x66666),
 			ie.NewLAI("123", "45", 0x1111),
 			nil,
-			ie.NewEMENBI("123", "45", 0x222222),
+			ie.NewEMENBI("123", "45", 0x122222),
 		),
 		[]byte{
 			0x56, 0x00, 0x26, 0x00,
@@ -404,40 +404,38 @@ var cases = []struct {
 			// RAI
 			0x21, 0xf3, 0x54, 0x11, 0x11,
 			// Extended Macro eNB ID
-			0x21, 0xf3, 0x54, 0x22, 0x22, 0x22,
+			0x21, 0xf3, 0x54, 0x12, 0x22, 0x22,
 		},
 	}, {
 		"UserLocationInformation/Full/v0.7.9+",
-		ie.NewUserLocationInformationStruct(
+		ie.NewUserLocationInformation(
 			ie.NewCGI("123", "45", 0x1111, 0x2222),
 			ie.NewSAI("123", "45", 0x1111, 0x3333),
-			ie.NewRAI("123", "45", 0x1111, 0x4444),
+			ie.NewRAI("123", "45", 0x1111, 0x44),
 			ie.NewTAI("123", "45", 0x5555),
-			ie.NewECGI("123", "45", 0x66666666),
+			ie.NewECGI("123", "45", 0x6666666),
 			ie.NewLAI("123", "45", 0x1111),
-			ie.NewMENBI("123", "45", 0x111111),
-			ie.NewEMENBI("123", "45", 0x222222),
+			nil,
+			ie.NewEMENBI("123", "45", 0x122222),
 		),
 		[]byte{
-			0x56, 0x00, 0x33, 0x00,
+			0x56, 0x00, 0x2d, 0x00,
 			// Flags
-			0xff,
+			0xbf,
 			// CGI
 			0x21, 0xf3, 0x54, 0x11, 0x11, 0x22, 0x22,
 			// SAI
 			0x21, 0xf3, 0x54, 0x11, 0x11, 0x33, 0x33,
 			// RAI
-			0x21, 0xf3, 0x54, 0x11, 0x11, 0x44, 0x44,
+			0x21, 0xf3, 0x54, 0x11, 0x11, 0x44, 0xff,
 			// TAI
 			0x21, 0xf3, 0x54, 0x55, 0x55,
 			// ECGI
 			0x21, 0xf3, 0x54, 0x06, 0x66, 0x66, 0x66,
 			// RAI
 			0x21, 0xf3, 0x54, 0x11, 0x11,
-			// Macro eNB ID
-			0x21, 0xf3, 0x54, 0x11, 0x11, 0x11,
 			// Extended Macro eNB ID
-			0x21, 0xf3, 0x54, 0x22, 0x22, 0x22,
+			0x21, 0xf3, 0x54, 0x12, 0x22, 0x22,
 		},
 	}, {
 		"FullyQualifiedTEID/v4",
@@ -570,7 +568,7 @@ var cases = []struct {
 	}, {
 		"NodeType",
 		ie.NewNodeType(gtpv2.NodeTypeMME),
-		[]byte{0x87, 0x00, 0x01, 0x00, 0x01},
+		[]byte{0x87, 0x00, 0x01, 0x00, 0x00},
 	}, {
 		"FullyQualifiedDomainName",
 		ie.NewFullyQualifiedDomainName("some-fqdn.example"),
@@ -578,10 +576,10 @@ var cases = []struct {
 	}, {
 		"RFSPIndex",
 		ie.NewRFSPIndex(1),
-		[]byte{0x90, 0x00, 0x01, 0x00, 0x01},
+		[]byte{0x90, 0x00, 0x02, 0x00, 0x00, 0x01},
 	}, {
 		"UserCSGInformation",
-		ie.NewUserCSGInformation("123", "45", 0x00ffffff, gtpv2.AccessModeHybrid, 0, gtpv2.CMICSG),
+		ie.NewUserCSGInformation("123", "45", 0x00ffffff, gtpv2.AccessModeHybrid, 0, gtpv2.UCICSG),
 		[]byte{0x91, 0x00, 0x08, 0x00, 0x21, 0xf3, 0x54, 0x00, 0xff, 0xff, 0xff, 0x41},
 	}, {
 		"CSGID",
@@ -590,7 +588,7 @@ var cases = []struct {
 	}, {
 		"CSGMembershipIndication",
 		ie.NewCSGMembershipIndication(gtpv2.CMICSG),
-		[]byte{0x94, 0x00, 0x01, 0x00, 0x01},
+		[]byte{0x94, 0x00, 0x01, 0x00, 0x00},
 	}, {
 		"ServiceIndicator",
 		ie.NewServiceIndicator(gtpv2.ServiceIndCSCall),
@@ -633,11 +631,11 @@ var cases = []struct {
 		[]byte{0xac, 0x00, 0x02, 0x00, 0x12, 0x01},
 	}, {
 		"PagingAndServiceInformation",
-		ie.NewPagingAndServiceInformation(5, 0x01, 0xff),
+		ie.NewPagingAndServiceInformation(5, 0x01, 0x7f),
 		[]byte{0xba, 0x00, 0x03, 0x00, 0x05, 0x01, 0x7f},
 	}, {
 		"IntegerNumber",
-		ie.NewIntegerNumber(2020),
+		ie.NewIntegerNumber(2020, 2),
 		[]byte{0xbb, 0x00, 0x02, 0x00, 0x07, 0xe4},
 	}, {
 		"PrivateExtension",

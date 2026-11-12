@@ -11,6 +11,9 @@ func NewChargingCharacteristics(chr uint16) *IE {
 
 // ChargingCharacteristics returns the ChargingCharacteristics value in uint16 if the type of IE matches.
 func (i *IE) ChargingCharacteristics() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != ChargingCharacteristics {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -20,6 +23,9 @@ func (i *IE) ChargingCharacteristics() (uint16, error) {
 // MustChargingCharacteristics returns ChargingCharacteristics in uint16, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustChargingCharacteristics() uint16 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.ChargingCharacteristics()
 	return v
 }

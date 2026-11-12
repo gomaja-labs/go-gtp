@@ -24,17 +24,7 @@ func NewStopPagingIndication(teid, seq uint32, ies ...*ie.IE) *StopPagingIndicat
 	}
 
 	for _, i := range ies {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.IMSI:
-			s.IMSI = i
-		case ie.PrivateExtension:
-			s.PrivateExtension = i
-		default:
-			s.AdditionalIEs = append(s.AdditionalIEs, i)
-		}
+		s.addIE(i)
 	}
 
 	s.SetLength()
@@ -52,35 +42,39 @@ func (s *StopPagingIndication) Marshal() ([]byte, error) {
 
 // MarshalTo serializes StopPagingIndication into bytes.
 func (s *StopPagingIndication) MarshalTo(b []byte) error {
-	if s.Header.Payload != nil {
-		s.Header.Payload = nil
+	if s == nil || s.Header == nil {
+		return ErrNilMessage
 	}
+	if err := s.Header.validate(MsgTypeStopPagingIndication, s.MarshalLen()); err != nil {
+		return err
+	}
+	if len(b) < s.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	s.Header.Payload = nil
 	s.Header.Payload = make([]byte, s.MarshalLen()-s.Header.MarshalLen())
-
 	offset := 0
-	if ie := s.IMSI; ie != nil {
-		if err := ie.MarshalTo(s.Payload[offset:]); err != nil {
+	if i := s.IMSI; i != nil {
+		if err := marshalNamedIE(i, s.Payload[offset:], "IMSI", iePair{ie.IMSI, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := s.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(s.Payload[offset:]); err != nil {
+	if i := s.PrivateExtension; i != nil {
+		if err := marshalNamedIE(i, s.Payload[offset:], "PrivateExtension", iePair{ie.PrivateExtension, 255}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
-	for _, ie := range s.AdditionalIEs {
-		if ie == nil {
+	for _, i := range s.AdditionalIEs {
+		if i == nil {
 			continue
 		}
-		if err := ie.MarshalTo(s.Header.Payload[offset:]); err != nil {
+		if err := i.MarshalTo(s.Payload[offset:]); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
 	s.Header.SetLength()
 	return s.Header.MarshalTo(b)
 }
@@ -89,6 +83,9 @@ func (s *StopPagingIndication) MarshalTo(b []byte) error {
 func ParseStopPagingIndication(b []byte) (*StopPagingIndication, error) {
 	s := &StopPagingIndication{}
 	if err := s.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return s, err
+		}
 		return nil, err
 	}
 	return s, nil
@@ -96,58 +93,50 @@ func ParseStopPagingIndication(b []byte) (*StopPagingIndication, error) {
 
 // UnmarshalBinary decodes given bytes as StopPagingIndication.
 func (s *StopPagingIndication) UnmarshalBinary(b []byte) error {
-	var err error
-	s.Header, err = ParseHeader(b)
+	if s == nil {
+		return ErrNilMessage
+	}
+	*s = StopPagingIndication{}
+	h, err := ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(s.Header.Payload) < 2 {
-		return nil
+	if h.Type != MsgTypeStopPagingIndication {
+		return &UnexpectedTypeError{Expected: MsgTypeStopPagingIndication, Actual: h.Type}
 	}
-
-	decodedIEs, err := ie.ParseMultiIEs(s.Header.Payload)
+	s.Header = h
+	decodedIEs, err := parseMessageIEs(h)
 	if err != nil {
 		return err
 	}
-	for _, i := range decodedIEs {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.IMSI:
-			s.IMSI = i
-		case ie.PrivateExtension:
-			s.PrivateExtension = i
-		default:
-			s.AdditionalIEs = append(s.AdditionalIEs, i)
-		}
-	}
-
-	return nil
+	return addDecodedIEs(h, decodedIEs, s.addIE)
 }
 
 // MarshalLen returns the serial length in int.
 func (s *StopPagingIndication) MarshalLen() int {
+	if s == nil || s.Header == nil {
+		return 0
+	}
 	l := s.Header.MarshalLen() - len(s.Header.Payload)
-	if ie := s.IMSI; ie != nil {
-		l += ie.MarshalLen()
+	if i := s.IMSI; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := s.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
+	if i := s.PrivateExtension; i != nil {
+		l += i.MarshalLen()
 	}
-
-	for _, ie := range s.AdditionalIEs {
-		if ie == nil {
-			continue
+	for _, i := range s.AdditionalIEs {
+		if i != nil {
+			l += i.MarshalLen()
 		}
-		l += ie.MarshalLen()
 	}
 	return l
 }
 
 // SetLength sets the length in Length field.
 func (s *StopPagingIndication) SetLength() {
-	s.Header.Length = uint16(s.MarshalLen() - 4)
+	if s != nil && s.Header != nil {
+		s.Header.setLength(s.MarshalLen() - s.Header.piggybackLen() - 4)
+	}
 }
 
 // MessageTypeName returns the name of protocol.
@@ -157,5 +146,81 @@ func (s *StopPagingIndication) MessageTypeName() string {
 
 // TEID returns the TEID in uint32.
 func (s *StopPagingIndication) TEID() uint32 {
+	if s == nil {
+		return 0
+	}
 	return s.Header.teid()
 }
+
+func (s *StopPagingIndication) GetHeader() *Header {
+	if s == nil {
+		return nil
+	}
+	return s.Header
+}
+
+// TS 29.274 Table 7.2.23-1: identify IEs by type and instance; §7.7.10: keep the first singleton.
+func (s *StopPagingIndication) addIE(i *ie.IE) {
+	if i == nil {
+		return
+	}
+	if err := i.Err(); err != nil {
+		s.Header.err = err
+	}
+	switch i.Type {
+	case ie.IMSI:
+		switch i.Instance() {
+		case 0:
+			if s.IMSI == nil {
+				s.IMSI = i
+			}
+		default:
+			s.AdditionalIEs = append(s.AdditionalIEs, i)
+		}
+	case ie.PrivateExtension:
+		if s.PrivateExtension == nil {
+			s.PrivateExtension = i
+		} else if s.PrivateExtension.Instance() != i.Instance() {
+			s.AdditionalIEs = append(s.AdditionalIEs, i)
+		}
+	default:
+		s.AdditionalIEs = append(s.AdditionalIEs, i)
+	}
+}
+
+// Version reads the common header, returning zero for a nil receiver.
+func (s *StopPagingIndication) Version() int { return s.GetHeader().Version() }
+
+// MessageType reads the common header, returning zero for a nil receiver.
+func (s *StopPagingIndication) MessageType() uint8 { return s.GetHeader().MessageType() }
+
+// Sequence reads the common header, returning zero for a nil receiver.
+func (s *StopPagingIndication) Sequence() uint32 { return s.GetHeader().Sequence() }
+
+// IsPiggybacking reads the common header, returning zero for a nil receiver.
+func (s *StopPagingIndication) IsPiggybacking() bool { return s.GetHeader().IsPiggybacking() }
+
+// HasTEID reads the common header, returning zero for a nil receiver.
+func (s *StopPagingIndication) HasTEID() bool { return s.GetHeader().HasTEID() }
+
+// HasMessagePriority reads the common header, returning zero for a nil receiver.
+func (s *StopPagingIndication) HasMessagePriority() bool { return s.GetHeader().HasMessagePriority() }
+
+// MessagePriority reads the common header, returning zero for a nil receiver.
+func (s *StopPagingIndication) MessagePriority() uint8 { return s.GetHeader().MessagePriority() }
+
+// SetSequenceNumber updates the common header safely on a nil receiver.
+func (s *StopPagingIndication) SetSequenceNumber(seq uint32) error {
+	return s.GetHeader().SetSequenceNumber(seq)
+}
+
+// SetMessagePriority updates the common header safely on a nil receiver.
+func (s *StopPagingIndication) SetMessagePriority(priority uint8) error {
+	return s.GetHeader().SetMessagePriority(priority)
+}
+
+// SetTEID updates the common header safely on a nil receiver.
+func (s *StopPagingIndication) SetTEID(teid uint32) { s.GetHeader().SetTEID(teid) }
+
+// SetPiggybacking updates the common header safely on a nil receiver.
+func (s *StopPagingIndication) SetPiggybacking(value uint8) { s.GetHeader().SetPiggybacking(value) }

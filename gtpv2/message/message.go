@@ -9,7 +9,6 @@ package message
 
 import (
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 
@@ -287,12 +286,16 @@ type Message interface {
 	TEID() uint32
 	SetTEID(uint32)
 	Sequence() uint32
-	SetSequenceNumber(uint32)
+	SetSequenceNumber(uint32) error
+	GetHeader() *Header
 }
 
 // Marshal returns the byte sequence generated from a Message instance.
 // Better to use MarshalXxx instead if you know the name of message to be serialized.
 func Marshal(m Message) ([]byte, error) {
+	if m == nil || m.GetHeader() == nil {
+		return nil, ErrNilMessage
+	}
 	b := make([]byte, m.MarshalLen())
 	if err := m.MarshalTo(b); err != nil {
 		return nil, err
@@ -305,8 +308,11 @@ func Marshal(m Message) ([]byte, error) {
 func Parse(b []byte) (Message, error) {
 	var m Message
 
+	if len(b) > 0 && b[0]>>5 != 2 {
+		return nil, &UnsupportedVersionError{Version: b[0] >> 5}
+	}
 	if len(b) < 2 {
-		return nil, io.ErrUnexpectedEOF
+		return nil, ErrTooShortToParse
 	}
 
 	switch b[1] {
@@ -403,6 +409,9 @@ func Parse(b []byte) (Message, error) {
 	}
 
 	if err := m.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return m, fmt.Errorf("failed to decode GTPv2 Message: %w", err)
+		}
 		return nil, fmt.Errorf("failed to decode GTPv2 Message: %w", err)
 	}
 	return m, nil

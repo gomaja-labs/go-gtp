@@ -15,7 +15,7 @@ func NewS1UDataForwarding(ebi uint8, sgwAddr string, sgwTEID uint32) *IE {
 	v := NewS1UDataForwardingFields(ebi, net.ParseIP(sgwAddr), sgwTEID)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(S1UDataForwarding, err)
 	}
 
 	return New(S1UDataForwarding, 0x00, b)
@@ -26,7 +26,7 @@ func NewS1UDataForwardingNetIP(ebi uint8, sgwIP net.IP, sgwTEID uint32) *IE {
 	v := NewS1UDataForwardingFields(ebi, sgwIP, sgwTEID)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(S1UDataForwarding, err)
 	}
 
 	return New(S1UDataForwarding, 0x00, b)
@@ -34,6 +34,9 @@ func NewS1UDataForwardingNetIP(ebi uint8, sgwIP net.IP, sgwTEID uint32) *IE {
 
 // S1UDataForwarding returns S1UDataForwarding in S1UDataForwardingFields type if the type of IE matches.
 func (i *IE) S1UDataForwarding() (*S1UDataForwardingFields, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	switch i.Type {
 	case S1UDataForwarding:
 		return ParseS1UDataForwardingFields(i.Payload)
@@ -77,6 +80,9 @@ func NewS1UDataForwardingFields(ebi uint8, sgwAddr net.IP, sgwTEID uint32) *S1UD
 
 // Marshal serializes S1UDataForwardingFields.
 func (f *S1UDataForwardingFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -87,6 +93,16 @@ func (f *S1UDataForwardingFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes S1UDataForwardingFields.
 func (f *S1UDataForwardingFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	// TS 29.274 §8.26: address is IPv4 or IPv6.
+	if len(f.ServingGWAddress) != 4 && len(f.ServingGWAddress) != 16 || int(f.ServingGWAddressLength) != len(f.ServingGWAddress) || f.EPSBearerID > 15 {
+		return ErrMalformed
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
@@ -122,6 +138,10 @@ func ParseS1UDataForwardingFields(b []byte) (*S1UDataForwardingFields, error) {
 
 // UnmarshalBinary decodes given bytes into S1UDataForwardingFields.
 func (f *S1UDataForwardingFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = S1UDataForwardingFields{}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
@@ -129,6 +149,9 @@ func (f *S1UDataForwardingFields) UnmarshalBinary(b []byte) error {
 
 	f.EPSBearerID = b[0] & 0x0f
 	f.ServingGWAddressLength = b[1]
+	if b[1] != 4 && b[1] != 16 {
+		return ErrInvalidLength
+	}
 	offset := 2
 
 	if l < offset+int(f.ServingGWAddressLength) {
@@ -147,11 +170,17 @@ func (f *S1UDataForwardingFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of S1UDataForwardingFields in int.
 func (f *S1UDataForwardingFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 2 + int(f.ServingGWAddressLength) + 4
 }
 
 // SGWAddress returns IP address of SGW in string if the type of IE matches.
 func (i *IE) SGWAddress() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	if i.Type != S1UDataForwarding {
 		return "", &InvalidTypeError{Type: i.Type}
 	}
@@ -162,6 +191,9 @@ func (i *IE) SGWAddress() (string, error) {
 // MustSGWAddress returns SGWAddress in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustSGWAddress() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.SGWAddress()
 	return v
 }

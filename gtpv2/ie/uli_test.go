@@ -8,20 +8,20 @@ import (
 	"testing"
 )
 
-func TestNewUserLocationInformationStruct(t *testing.T) {
+func TestNewUserLocationInformation(t *testing.T) {
 	t.Run("Test UserLocationInformation unmarshal", func(t *testing.T) {
-		uli := NewUserLocationInformationStruct(
+		uli := NewUserLocationInformation(
 			NewCGI("123", "45", 0x1111, 0x2222),
 			NewSAI("123", "45", 0x1111, 0x3333),
-			NewRAI("123", "45", 0x1111, 0x4444),
+			NewRAI("123", "45", 0x1111, 0x44),
 			NewTAI("123", "45", 0x5555),
-			NewECGI("123", "45", 0x66666666),
+			NewECGI("123", "45", 0x6666666),
 			NewLAI("123", "45", 0x1111),
-			NewMENBI("123", "45", 0x111111),
-			NewEMENBI("123", "45", 0x222222),
+			NewMENBI("123", "45", 0x11111),
+			nil,
 		)
 		if uli == nil {
-			t.Fatalf("Error in NewUserLocationInformationStruct")
+			t.Fatalf("Error in NewUserLocationInformation")
 		}
 
 		uliFields, err := uli.UserLocationInformation()
@@ -61,7 +61,7 @@ func TestNewUserLocationInformationStruct(t *testing.T) {
 		if uliFields.RAI.LAC != 0x1111 {
 			t.Errorf("wrong uliFields.RAI.LAC, got: 0x%x", uliFields.RAI.LAC)
 		}
-		if uliFields.RAI.RAC != 0x4444 {
+		if uliFields.RAI.RAC != 0x44 {
 			t.Errorf("wrong uliFields.RAI.RAC, got: 0x%x", uliFields.RAI.RAC)
 		}
 		if uliFields.RAI.PLMN.MCC != "123" {
@@ -105,7 +105,7 @@ func TestNewUserLocationInformationStruct(t *testing.T) {
 		}
 
 		// MENBI
-		if uliFields.MENBI.MENBI != 0x111111 {
+		if uliFields.MENBI.MENBI != 0x11111 {
 			t.Errorf("wrong uliFields.MENBI.MENBI, got: 0x%x", uliFields.MENBI.MENBI)
 		}
 		if uliFields.MENBI.PLMN.MCC != "123" {
@@ -115,15 +115,5 @@ func TestNewUserLocationInformationStruct(t *testing.T) {
 			t.Errorf("wrong uliFields.MENBI.PLMN.MNC, got: %v", uliFields.MENBI.PLMN.MNC)
 		}
 
-		// EMENBI
-		if uliFields.EMENBI.EMENBI != 0x222222 {
-			t.Errorf("wrong uliFields.EMENBI.EMENBI, got: 0x%x", uliFields.EMENBI.EMENBI)
-		}
-		if uliFields.EMENBI.PLMN.MCC != "123" {
-			t.Errorf("wrong uliFields.EMENBI.PLMN.MCC, got: %v", uliFields.EMENBI.PLMN.MCC)
-		}
-		if uliFields.EMENBI.PLMN.MNC != "45" {
-			t.Errorf("wrong uliFields.EMENBI.PLMN.MNC, got: %v", uliFields.EMENBI.PLMN.MNC)
-		}
 	})
 }

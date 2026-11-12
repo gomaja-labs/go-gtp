@@ -11,15 +11,7 @@ import (
 
 // NewIPAddress creates a new IPAddress IE from string.
 func NewIPAddress(addr string) *IE {
-	ip := net.ParseIP(addr)
-	v4 := ip.To4()
-
-	// IPv4
-	if v4 != nil {
-		return New(IPAddress, 0x00, v4)
-	}
-	// IPv6
-	return New(IPAddress, 0x00, ip)
+	return NewIPAddressNetIP(net.ParseIP(addr))
 }
 
 // NewIPAddressNetIP creates a new IPAddress IE from net.IP.
@@ -32,12 +24,14 @@ func NewIPAddressNetIP(ip net.IP) *IE {
 		return New(IPAddress, 0x00, v)
 	}
 
-	// return IE w/ "something" anyway, to avoid crash
-	return New(IPAddress, 0x00, ip)
+	return newErrorIE(IPAddress, ErrMalformed)
 }
 
 // IPAddress returns IPAddress value if the type of IE matches.
 func (i *IE) IPAddress() (string, error) {
+	if err := i.Err(); err != nil {
+		return "", err
+	}
 	ip, err := i.IP()
 	if err != nil {
 		return "", err
@@ -49,6 +43,9 @@ func (i *IE) IPAddress() (string, error) {
 // MustIPAddress returns IPAddress in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustIPAddress() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.IPAddress()
 	return v
 }
@@ -62,12 +59,19 @@ func (i *IE) MustIPAddress() string {
 // If the IE has both IPv4 and IPv6, this returns IPv4. To retrieve IPv6
 // value in that case, use IPv6() instead.
 func (i *IE) IP() (net.IP, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if len(i.Payload) < 4 {
 		return nil, io.ErrUnexpectedEOF
 	}
 
 	switch i.Type {
 	case IPAddress:
+		// TS 29.274 §8.9: IPv4 or IPv6.
+		if len(i.Payload) != 4 && len(i.Payload) != 16 {
+			return nil, ErrInvalidLength
+		}
 		return net.IP(i.Payload), nil
 	case PDNAddressAllocation:
 		if len(i.Payload) < 5 {
@@ -140,6 +144,9 @@ func (i *IE) MustIP() net.IP {
 
 // IPv4 returns IPv4 value in net.IP if the type of IE matches.
 func (i *IE) IPv4() (net.IP, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	ip, err := i.IP()
 	if err != nil {
 		return nil, err
@@ -160,6 +167,9 @@ func (i *IE) MustIPv4() net.IP {
 
 // IPv6 returns IPv6 value in net.IP if the type of IE matches.
 func (i *IE) IPv6() (net.IP, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if len(i.Payload) < 4 {
 		return nil, io.ErrUnexpectedEOF
 	}

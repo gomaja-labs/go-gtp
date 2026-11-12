@@ -19,7 +19,7 @@ const (
 	teidHeaderSize   = noTEIDHeaderSize + teidSize
 )
 
-// Header is a GTPv2 common header
+// Header is a GTPv2 common header.
 type Header struct {
 	Flags          uint8
 	Type           uint8
@@ -28,32 +28,104 @@ type Header struct {
 	SequenceNumber uint32
 	Spare          uint8
 	Payload        []byte
+	// Piggybacked is the optional second message in the datagram. Marshal sets
+	// P from this field; Length describes only the first message (TS 29.274 §5.5.1).
+	// Process this message after the enclosing message (TS 29.274 §7.7.0).
+	Piggybacked Message
+	// PiggybackError reports a secondary-message decode failure. The primary
+	// message remains usable (TS 29.274 §7.7.0); encoders reject this state.
+	PiggybackError error
+	err            error
 }
 
-// NewHeader creates a new Header
+// NewHeader creates a new Header. Invalid values are rejected by MarshalTo.
 func NewHeader(flags, mtype uint8, teid, seqnum uint32, data []byte) *Header {
-	h := &Header{
-		Flags:          flags,
-		Type:           mtype,
-		TEID:           teid,
-		SequenceNumber: seqnum,
-		Spare:          0,
-		Payload:        data,
+	h := &Header{Flags: flags, Type: mtype, TEID: teid, SequenceNumber: seqnum, Payload: data}
+	if !h.HasTEID() {
+		h.TEID = 0
 	}
 	h.SetLength()
-
 	return h
 }
 
 // NewHeaderFlags returns a Header Flag built by its components given as arguments.
 func NewHeaderFlags(v, p, t int) uint8 {
-	return uint8(
-		((v & 0x7) << 5) | ((p & 0x1) << 4) | ((t & 0x1) << 3),
-	)
+	return uint8(((v & 7) << 5) | ((p & 1) << 4) | ((t & 1) << 3))
+}
+
+// GetHeader returns the common header, including the optional piggybacked message.
+func (h *Header) GetHeader() *Header { return h }
+
+func (h *Header) headerLen() int {
+	if h.HasTEID() {
+		return teidHeaderSize
+	}
+	return noTEIDHeaderSize
+}
+
+func (h *Header) piggybackLen() int {
+	if h == nil || h.Piggybacked == nil {
+		return 0
+	}
+	// Reject chains and cycles in validate before asking the child for its size.
+	if p := h.Piggybacked.GetHeader(); p == nil || p == h || p.Piggybacked != nil {
+		return 0
+	}
+	return h.Piggybacked.MarshalLen()
+}
+
+func requiresTEID(typ uint8) bool {
+	return typ != MsgTypeEchoRequest && typ != MsgTypeEchoResponse && typ != MsgTypeVersionNotSupportedIndication
+}
+
+func validPiggyback(first, second uint8) bool {
+	// TS 29.274 §5.5.1: only these two EPC message pairs may share a datagram.
+	return first == MsgTypeCreateSessionResponse && second == MsgTypeCreateBearerRequest ||
+		first == MsgTypeCreateBearerResponse && second == MsgTypeModifyBearerRequest
+}
+
+func (h *Header) validate(expected uint8, size int) error {
+	if h == nil {
+		return ErrNilMessage
+	}
+	if h.PiggybackError != nil {
+		return h.PiggybackError
+	}
+	if h.err != nil {
+		return h.err
+	}
+	if h.Version() != 2 {
+		return &UnsupportedVersionError{Version: uint8(h.Version())}
+	}
+	if h.Type != expected {
+		return &UnexpectedTypeError{Expected: expected, Actual: h.Type}
+	}
+	// TS 29.274 §§5.3, 5.4, 5.5.1: only Echo and VNSI omit TEID.
+	if h.HasTEID() != requiresTEID(h.Type) {
+		return ErrInvalidTEIDFlag
+	}
+	if h.SequenceNumber > 0xffffff {
+		return ErrInvalidSequence
+	}
+	if h.Piggybacked != nil {
+		p := h.Piggybacked.GetHeader()
+		if p == nil || p == h || p.Piggybacked != nil || !validPiggyback(h.Type, p.Type) {
+			return ErrInvalidPiggyback
+		}
+	} else if h.IsPiggybacking() {
+		return ErrInvalidPiggyback
+	}
+	if size-h.piggybackLen()-fixedHeaderSize > 0xffff {
+		return ErrInvalidLength
+	}
+	return nil
 }
 
 // Marshal returns the byte sequence generated from a Header instance.
 func (h *Header) Marshal() ([]byte, error) {
+	if h == nil {
+		return nil, ErrNilMessage
+	}
 	b := make([]byte, h.MarshalLen())
 	if err := h.MarshalTo(b); err != nil {
 		return nil, err
@@ -61,28 +133,47 @@ func (h *Header) Marshal() ([]byte, error) {
 	return b, nil
 }
 
-// MarshalTo puts the byte sequence in the byte array given as b.
+// MarshalTo writes the whole datagram, returning an error for invalid fields or
+// a short destination. Spare bits are always zero (TS 29.274 §§5.3–5.5.1).
 func (h *Header) MarshalTo(b []byte) error {
-	b[0] = h.Flags
-	b[1] = h.Type
-	binary.BigEndian.PutUint16(b[2:4], h.Length)
-	offset := 4
-	if h.HasTEID() {
-		binary.BigEndian.PutUint32(b[offset:offset+4], h.TEID)
-		offset += 4
+	if h == nil {
+		return ErrNilMessage
 	}
-	encoded, err := utils.Uint32To24(h.SequenceNumber)
-	if err != nil {
+	if err := h.validate(h.Type, h.MarshalLen()); err != nil {
 		return err
 	}
-	copy(b[offset:offset+3], encoded)
-	b[offset+3] = h.Spare
-	copy(b[offset+4:h.MarshalLen()], h.Payload)
-
+	if len(b) < h.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	h.SetLength()
+	flags := h.Flags & 0xec
+	if !h.HasTEID() {
+		flags &^= 4
+	}
+	if h.Piggybacked != nil {
+		flags |= 0x10
+	}
+	b[0], b[1] = flags, h.Type
+	binary.BigEndian.PutUint16(b[2:4], h.Length)
+	offset := fixedHeaderSize
+	if h.HasTEID() {
+		binary.BigEndian.PutUint32(b[offset:offset+4], h.TEID)
+		offset += teidSize
+	}
+	b[offset], b[offset+1], b[offset+2] = byte(h.SequenceNumber>>16), byte(h.SequenceNumber>>8), byte(h.SequenceNumber)
+	b[offset+3] = 0
+	if h.HasTEID() && h.HasMessagePriority() {
+		b[offset+3] = h.Spare & 0xf0
+	}
+	end := h.headerLen() + len(h.Payload)
+	copy(b[offset+4:end], h.Payload)
+	if h.Piggybacked != nil {
+		return h.Piggybacked.MarshalTo(b[end:])
+	}
 	return nil
 }
 
-// ParseHeader decodes given byte sequence as a GTPv2 header.
+// ParseHeader decodes a complete datagram, retaining its optional second message.
 func ParseHeader(b []byte) (*Header, error) {
 	h := &Header{}
 	if err := h.UnmarshalBinary(b); err != nil {
@@ -91,100 +182,117 @@ func ParseHeader(b []byte) (*Header, error) {
 	return h, nil
 }
 
-// UnmarshalBinary sets the values retrieved from byte sequence in GTPv2 header.
+// UnmarshalBinary resets the header and decodes a complete datagram.
+// LengthError carries the safely decoded transaction fields needed by §7.7.3;
+// UnsupportedVersionError supports the version-specific handling in §7.7.2.
 func (h *Header) UnmarshalBinary(b []byte) error {
-	l := len(b)
-	if l < 12 {
+	if h == nil {
+		return ErrNilMessage
+	}
+	*h = Header{}
+	if len(b) < 1 {
 		return ErrTooShortToParse
 	}
 	h.Flags = b[0]
-	h.Type = b[1]
-	h.Length = binary.BigEndian.Uint16(b[2:4])
-	if h.Length < seqSpareSize {
+	if h.Version() != 2 {
+		return &UnsupportedVersionError{Version: uint8(h.Version())}
+	}
+	if len(b) < h.headerLen() {
 		return ErrTooShortToParse
 	}
+	h.Type, h.Length = b[1], binary.BigEndian.Uint16(b[2:4])
+	offset := fixedHeaderSize
 	if h.HasTEID() {
-		if h.Length < seqSpareSize+teidSize {
-			return ErrTooShortToParse
-		}
 		h.TEID = binary.BigEndian.Uint32(b[4:8])
-		h.SequenceNumber = utils.Uint24To32(b[8:11])
-		h.Spare = b[11]
-
-		if int(h.Length)+fixedHeaderSize > l {
-			h.Payload = b[teidHeaderSize:]
-			return nil
+		offset += teidSize
+	}
+	h.SequenceNumber = utils.Uint24To32(b[offset : offset+3])
+	if h.HasTEID() && h.HasMessagePriority() {
+		h.Spare = b[offset+3] & 0xf0
+	}
+	end := int(h.Length) + fixedHeaderSize
+	lengthErr := &LengthError{MessageType: h.Type, TEID: h.TEID, SequenceNumber: h.SequenceNumber, Declared: end, Actual: len(b)}
+	// TS 29.274 §7.7.3: distinguish missing header bytes from inconsistent Length.
+	if end < h.headerLen() || end > len(b) {
+		return lengthErr
+	}
+	if h.HasTEID() != requiresTEID(h.Type) {
+		return ErrInvalidTEIDFlag
+	}
+	if h.IsPiggybacking() {
+		if len(b)-end < noTEIDHeaderSize {
+			return lengthErr
 		}
-		if fixedHeaderSize+h.Length >= teidHeaderSize {
-			h.Payload = b[teidHeaderSize : fixedHeaderSize+h.Length]
+		if h.Type != MsgTypeCreateSessionResponse && h.Type != MsgTypeCreateBearerResponse {
+			return ErrInvalidPiggyback
+		}
+		// TS 29.274 §7.7.3: first check the overall datagram framing.
+		secondaryEnd := end + fixedHeaderSize + int(binary.BigEndian.Uint16(b[end+2:end+4]))
+		if secondaryEnd != len(b) {
+			return lengthErr
+		}
+		// TS 29.274 §7.7.0: a bad secondary message cannot cost the primary.
+		if b[end]&0x10 != 0 || !validPiggyback(h.Type, b[end+1]) {
+			h.PiggybackError = ErrInvalidPiggyback
 		} else {
-			return ErrInvalidLength
+			h.Piggybacked, h.PiggybackError = Parse(b[end:])
 		}
-		return nil
+	} else if end != len(b) {
+		return lengthErr
 	}
-	h.SequenceNumber = utils.Uint24To32(b[4:7])
-	h.Spare = b[7]
-
-	if int(h.Length)+fixedHeaderSize > l {
-		h.Payload = b[noTEIDHeaderSize:]
-		return nil
-	}
-	if fixedHeaderSize+h.Length >= noTEIDHeaderSize {
-		h.Payload = b[noTEIDHeaderSize : fixedHeaderSize+h.Length]
-	} else {
-		return ErrInvalidLength
-	}
-
+	h.Payload = b[h.headerLen():end]
 	return nil
 }
 
-// MarshalLen returns field length in integer.
+// MarshalLen returns the complete datagram size, including any piggybacked message.
 func (h *Header) MarshalLen() int {
-	l := 8 + len(h.Payload)
-	if h.HasTEID() {
-		l += 4
+	if h == nil {
+		return 0
 	}
-
-	return l
+	return h.headerLen() + len(h.Payload) + h.piggybackLen()
 }
 
-// SetLength sets the length in Length field.
+func (h *Header) setLength(length int) {
+	if h == nil {
+		return
+	}
+	if length < 0 || length > 0xffff {
+		h.Length = 0
+		return
+	}
+	h.Length = uint16(length)
+}
+
+// SetLength updates Length for this message, excluding its piggybacked message.
+// MarshalTo rejects lengths that cannot be represented in sixteen bits.
 func (h *Header) SetLength() {
-	h.Length = uint16(4 + len(h.Payload))
-	if h.HasTEID() {
-		h.Length += 4
+	if h != nil {
+		h.setLength(h.headerLen() + len(h.Payload) - fixedHeaderSize)
 	}
 }
 
 // String returns the GTPv2 header values in human readable format.
 func (h *Header) String() string {
-	return fmt.Sprintf("{Flags: %#x, Type: %d, Length: %d, TEID: %#x, SequenceNumber: %#x, Spare: %d, Payload: %#v}",
-		h.Flags,
-		h.Type,
-		h.Length,
-		h.TEID,
-		h.SequenceNumber,
-		h.Spare,
-		h.Payload,
-	)
+	if h == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("{Flags: %#x, Type: %d, Length: %d, TEID: %#x, SequenceNumber: %#x, Spare: %d, Payload: %#v}", h.Flags, h.Type, h.Length, h.TEID, h.SequenceNumber, h.Spare, h.Payload)
 }
 
-// IsPiggybacking reports whether the message has the trailing(piggybacked) message.
+// IsPiggybacking reports whether the message has a piggybacked message or P flag.
 func (h *Header) IsPiggybacking() bool {
-	return (int(h.Flags)>>4)&0x01 == 1
+	return h != nil && (h.Piggybacked != nil || h.Flags&0x10 != 0)
 }
 
-// SetPiggybacking sets the Piggybacking flag.
-//
-// The given value should only be 0 or 1. Otherwise it may cause the unexpected result.
+// SetPiggybacking sets P. Marshal requires a corresponding Piggybacked message.
 func (h *Header) SetPiggybacking(val uint8) {
-	h.Flags = (h.Flags & 0xef) | (val & 0x01 << 4)
+	if h != nil {
+		h.Flags = (h.Flags &^ 0x10) | ((val & 1) << 4)
+	}
 }
 
-// HasTEID determines whether a GTPv2 has TEID inside by checking the flag.
-func (h *Header) HasTEID() bool {
-	return (int(h.Flags)>>3)&0x01 == 1
-}
+// HasTEID reports whether T is set.
+func (h *Header) HasTEID() bool { return h != nil && h.Flags&8 != 0 }
 
 func (h *Header) teid() uint32 {
 	if !h.HasTEID() {
@@ -193,48 +301,73 @@ func (h *Header) teid() uint32 {
 	return h.TEID
 }
 
-// SetTEID sets the TEIDFlag to 1 and puts the TEID given into TEID field.
+// SetTEID sets T and TEID; Marshal validates the message-specific T policy.
 func (h *Header) SetTEID(teid uint32) {
-	h.Flags |= (1 << 3)
-	h.TEID = teid
+	if h != nil {
+		h.Flags |= 8
+		h.TEID = teid
+	}
 }
 
-// Sequence returns SequenceNumber in uint32.
+// Sequence returns the sequence number, or zero for a nil header.
 func (h *Header) Sequence() uint32 {
+	if h == nil {
+		return 0
+	}
 	return h.SequenceNumber
 }
 
-// SetSequenceNumber sets the SequenceNumber in Header.
-func (h *Header) SetSequenceNumber(seq uint32) {
+// SetSequenceNumber rejects values outside the 24-bit field (TS 29.274 §5.5.1).
+func (h *Header) SetSequenceNumber(seq uint32) error {
+	if h == nil {
+		return ErrNilMessage
+	}
+	if seq > 0xffffff {
+		return ErrInvalidSequence
+	}
 	h.SequenceNumber = seq
+	return nil
 }
 
-// HasMessagePriority reports whether the message has MessagePriority field
-func (h *Header) HasMessagePriority() bool {
-	return (int(h.Flags)>>2)&0x01 == 1
+// HasMessagePriority reports whether MP is set.
+func (h *Header) HasMessagePriority() bool { return h.HasTEID() && h.Flags&4 != 0 }
+
+// SetMessagePriority accepts the priority value 0–15 (TS 29.274 §5.5.1).
+func (h *Header) SetMessagePriority(mp uint8) error {
+	if h == nil {
+		return ErrNilMessage
+	}
+	if mp > 15 {
+		return ErrInvalidPriority
+	}
+	if !h.HasTEID() {
+		return ErrInvalidTEIDFlag
+	}
+	h.Flags |= 4
+	h.Spare = mp << 4
+	return nil
 }
 
-// SetMessagePriority sets the MessagePriorityFlag to 1 and puts the MessagePriority
-// given into MessagePriority field.
-func (h *Header) SetMessagePriority(mp uint8) {
-	h.Flags |= (1 << 2)
-	h.Spare = (mp & 0xf0)
-}
-
-// MessagePriority returns the value of MessagePriority.
-//
-// Note that this returns the value set in the field even if the MessagePriorityFlag
-// is not set to 1.
+// MessagePriority returns the four-bit value, or zero when MP is absent.
 func (h *Header) MessagePriority() uint8 {
-	return h.Spare & 0xf0
+	if !h.HasMessagePriority() {
+		return 0
+	}
+	return h.Spare >> 4
 }
 
-// Version returns the GTP version.
+// Version returns the version in the header flags, or zero for a nil header.
 func (h *Header) Version() int {
-	return 2
+	if h == nil {
+		return 0
+	}
+	return int(h.Flags >> 5)
 }
 
-// MessageType returns the type of messagg.
+// MessageType returns the wire message type, or zero for a nil header.
 func (h *Header) MessageType() uint8 {
+	if h == nil {
+		return 0
+	}
 	return h.Type
 }

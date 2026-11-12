@@ -11,6 +11,9 @@ func NewProcedureTransactionID(pti uint8) *IE {
 
 // ProcedureTransactionID returns ProcedureTransactionID in uint8 if the type of IE matches.
 func (i *IE) ProcedureTransactionID() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != ProcedureTransactionID {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -20,6 +23,9 @@ func (i *IE) ProcedureTransactionID() (uint8, error) {
 // MustProcedureTransactionID returns ProcedureTransactionID in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustProcedureTransactionID() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.ProcedureTransactionID()
 	return v
 }

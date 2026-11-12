@@ -11,6 +11,9 @@ func NewChargingID(id uint32) *IE {
 
 // ChargingID returns the ChargingID value in uint32 if the type of IE matches.
 func (i *IE) ChargingID() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case ChargingID:
 		return i.ValueAsUint32()
@@ -20,8 +23,9 @@ func (i *IE) ChargingID() (uint32, error) {
 			return 0, err
 		}
 
+		// TS 29.274 §7.7.9: match the child type and instance together.
 		for _, child := range ies {
-			if child.Type == ChargingID {
+			if child != nil && child.Type == ChargingID && child.Instance() == 0 {
 				return child.ChargingID()
 			}
 		}
@@ -34,6 +38,9 @@ func (i *IE) ChargingID() (uint32, error) {
 // MustChargingID returns ChargingID in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustChargingID() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.ChargingID()
 	return v
 }

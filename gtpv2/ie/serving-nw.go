@@ -43,6 +43,9 @@ func (i *IE) ServingNetwork() (string, error) {
 // MustServingNetwork returns ServingNetwork in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustServingNetwork() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.ServingNetwork()
 	return v
 }

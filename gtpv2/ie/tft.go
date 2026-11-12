@@ -27,8 +27,9 @@ func (i *IE) TrafficFlowTemplate() (*TrafficFlowTemplate, error) {
 			return nil, fmt.Errorf("failed to retrieve BearerContext: %w", err)
 		}
 
+		// TS 29.274 §7.7.9: match the child type and instance together.
 		for _, child := range ies {
-			if child.Type == BearerTFT {
+			if child != nil && child.Type == BearerTFT && child.Instance() == 0 {
 				return child.TrafficFlowTemplate()
 			}
 		}
@@ -48,30 +49,14 @@ type TrafficFlowTemplate struct {
 
 // NewTrafficFlowTemplate creates a new TrafficFlowTemplate.
 func NewTrafficFlowTemplate(op uint8, filters []*TFTPacketFilter, ids []uint8, params []*TFTParameter) *TrafficFlowTemplate {
-	var fs []*TFTPacketFilter
-	for _, f := range filters {
-		if f != nil {
-			fs = append(fs, f)
-		}
-	}
-
-	var ps []*TFTParameter
-	for _, p := range params {
-		if p != nil {
-			ps = append(ps, p)
-		}
-	}
-
-	return &TrafficFlowTemplate{
-		OperationCode:           op,
-		PacketFilters:           fs,
-		PacketFilterIdentifiers: ids,
-		Parameters:              ps,
-	}
+	return &TrafficFlowTemplate{OperationCode: op, PacketFilters: filters, PacketFilterIdentifiers: ids, Parameters: params}
 }
 
 // Marshal serializes TrafficFlowTemplate.
 func (f *TrafficFlowTemplate) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -82,6 +67,15 @@ func (f *TrafficFlowTemplate) Marshal() ([]byte, error) {
 
 // MarshalTo serializes TrafficFlowTemplate.
 func (f *TrafficFlowTemplate) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if err := f.validate(); err != nil {
+		return err
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	if len(b) < 1 {
 		return io.ErrUnexpectedEOF
 	}
@@ -90,7 +84,10 @@ func (f *TrafficFlowTemplate) MarshalTo(b []byte) error {
 	// ...0 .... = E bit
 	// .... 0000 = Number of packet filters
 	op := (f.OperationCode & 0b111) << 5
-	e := uint8(len(f.Parameters)*1&0b1) << 4
+	var e uint8
+	if len(f.Parameters) > 0 {
+		e = 0x10
+	} // TS 24.008 §10.5.6.12: list presence.
 	pf := len(f.PacketFilters)
 	if f.OperationCode == TFTOpDeletePacketFiltersFromExistingTFT {
 		pf = len(f.PacketFilterIdentifiers)
@@ -142,6 +139,10 @@ func ParseTrafficFlowTemplate(b []byte) (*TrafficFlowTemplate, error) {
 
 // UnmarshalBinary decodes given bytes into TrafficFlowTemplate.
 func (f *TrafficFlowTemplate) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = TrafficFlowTemplate{}
 	if len(b) < 1 {
 		return io.ErrUnexpectedEOF
 	}
@@ -149,6 +150,13 @@ func (f *TrafficFlowTemplate) UnmarshalBinary(b []byte) error {
 	f.OperationCode = b[0] >> 5
 	hasParams := (b[0] >> 4 & 0b1) == 1
 	filterLen := int(b[0] & 0b1111)
+	// TS 24.008 §10.5.6.12 Table 10.5.162: count and E depend on operation.
+	if (f.OperationCode == 0 || f.OperationCode == TFTOpDeleteExistingTFT || f.OperationCode == TFTOpNoTFTOperation) && filterLen != 0 {
+		return ErrMalformed
+	}
+	if f.OperationCode == 0 && hasParams {
+		return ErrMalformed
+	}
 
 	offset := 1
 	switch f.OperationCode {
@@ -169,11 +177,18 @@ func (f *TrafficFlowTemplate) UnmarshalBinary(b []byte) error {
 			return io.ErrUnexpectedEOF
 		}
 
-		f.PacketFilterIdentifiers = b[offset : offset+filterLen]
+		// TS 24.008 §§10.5, 10.5.6.12: ignore the spare high nibble on receipt.
+		f.PacketFilterIdentifiers = make([]uint8, filterLen)
+		for n, id := range b[offset : offset+filterLen] {
+			f.PacketFilterIdentifiers[n] = id & 0x0f
+		}
 		offset += filterLen
 	}
 
 	if hasParams {
+		if len(b) <= offset {
+			return io.ErrUnexpectedEOF
+		}
 		params, err := ParseMultiTFTParameters(b[offset:])
 		if err != nil {
 			return fmt.Errorf("failed to parse Parameters: %w", err)
@@ -181,11 +196,14 @@ func (f *TrafficFlowTemplate) UnmarshalBinary(b []byte) error {
 		f.Parameters = params
 	}
 
-	return nil
+	return f.validate()
 }
 
 // MarshalLen returns the serial length of TrafficFlowTemplate in int.
 func (f *TrafficFlowTemplate) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	l := 1
 
 	for _, filter := range f.PacketFilters {
@@ -239,6 +257,9 @@ func NewTFTPacketFilter(dir, id, precedence uint8, comps ...*TFTPFComponent) *TF
 
 // Marshal serializes TFTPacketFilter.
 func (p *TFTPacketFilter) Marshal() ([]byte, error) {
+	if p == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, p.MarshalLen())
 	if err := p.MarshalTo(b); err != nil {
 		return nil, err
@@ -249,6 +270,16 @@ func (p *TFTPacketFilter) Marshal() ([]byte, error) {
 
 // MarshalTo serializes TFTPacketFilter into b.
 func (p *TFTPacketFilter) MarshalTo(b []byte) error {
+	if p == nil {
+		return ErrIENotFound
+	}
+	// TS 24.008 §10.5.6.12: nonempty filter, four-bit ID, two-bit direction.
+	if p.Identifier > 15 || p.Direction > 3 || len(p.Components) == 0 || p.MarshalLen()-3 > 255 || int(p.Length) != p.MarshalLen()-3 {
+		return ErrMalformed
+	}
+	if len(b) < p.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
@@ -286,6 +317,10 @@ func ParseTFTPacketFilter(b []byte) (*TFTPacketFilter, error) {
 
 // UnmarshalBinary decodes given bytes into TFTPacketFilter.
 func (p *TFTPacketFilter) UnmarshalBinary(b []byte) error {
+	if p == nil {
+		return ErrIENotFound
+	}
+	*p = TFTPacketFilter{}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
@@ -295,6 +330,9 @@ func (p *TFTPacketFilter) UnmarshalBinary(b []byte) error {
 	p.Identifier = b[0] & 0b1111
 	p.EvaluationPrecedence = b[1]
 	p.Length = b[2]
+	if p.Length == 0 {
+		return ErrMalformed
+	}
 	offset := 3
 
 	n := offset + int(p.Length)
@@ -312,6 +350,9 @@ func (p *TFTPacketFilter) UnmarshalBinary(b []byte) error {
 
 // SetLength sets the length in TFTPacketFilter.
 func (p *TFTPacketFilter) SetLength() {
+	if p == nil {
+		return
+	}
 	l := 0
 	for _, comp := range p.Components {
 		l += comp.MarshalLen()
@@ -322,6 +363,9 @@ func (p *TFTPacketFilter) SetLength() {
 
 // MarshalLen returns the serial length of TFTPacketFilter in int.
 func (p *TFTPacketFilter) MarshalLen() int {
+	if p == nil {
+		return 0
+	}
 	l := 3
 
 	for _, comp := range p.Components {
@@ -444,6 +488,9 @@ func NewTFTPFComponentTypeOfServiceTrafficClass(class, mask uint8) *TFTPFCompone
 
 // NewTFTPFComponentFlowLabel creates a new TFTPFComponent of type FlowLabel.
 func NewTFTPFComponentFlowLabel(label uint32) *TFTPFComponent {
+	if label > 0xfffff {
+		return &TFTPFComponent{err: utils.ErrOutOfRange}
+	}
 	b, err := utils.Uint32To24(label)
 	return &TFTPFComponent{Type: PFCompFlowLabel, Contents: b, err: err}
 }
@@ -460,6 +507,9 @@ func NewTFTPFComponentSourceMACAddress(mac net.HardwareAddr) *TFTPFComponent {
 
 // NewTFTPFComponentDot1QCTAGVID creates a new TFTPFComponent of type Dot1QCTAGVID.
 func NewTFTPFComponentDot1QCTAGVID(vid uint16) *TFTPFComponent {
+	if vid > 0xfff {
+		return &TFTPFComponent{err: ErrMalformed}
+	}
 	b := make([]byte, 2)
 	binary.BigEndian.PutUint16(b, vid)
 	return NewTFTPFComponent(PFCompDot1QCTAGVID, b)
@@ -467,6 +517,9 @@ func NewTFTPFComponentDot1QCTAGVID(vid uint16) *TFTPFComponent {
 
 // NewTFTPFComponentDot1QSTAGVID creates a new TFTPFComponent of type Dot1QSTAGVID.
 func NewTFTPFComponentDot1QSTAGVID(vid uint16) *TFTPFComponent {
+	if vid > 0xfff {
+		return &TFTPFComponent{err: ErrMalformed}
+	}
 	b := make([]byte, 2)
 	binary.BigEndian.PutUint16(b, vid)
 	return NewTFTPFComponent(PFCompDot1QSTAGVID, b)
@@ -474,11 +527,17 @@ func NewTFTPFComponentDot1QSTAGVID(vid uint16) *TFTPFComponent {
 
 // NewTFTPFComponentDot1QCTAGPCPDEI creates a new TFTPFComponent of type Dot1QCTAGPCPDEI.
 func NewTFTPFComponentDot1QCTAGPCPDEI(pcpdei uint8) *TFTPFComponent {
+	if pcpdei > 15 {
+		return &TFTPFComponent{err: ErrMalformed}
+	}
 	return NewTFTPFComponent(PFCompDot1QCTAGPCPDEI, []byte{pcpdei})
 }
 
 // NewTFTPFComponentDot1QSTAGPCPDEI creates a new TFTPFComponent of type Dot1QSTAGPCPDEI.
 func NewTFTPFComponentDot1QSTAGPCPDEI(pcpdei uint8) *TFTPFComponent {
+	if pcpdei > 15 {
+		return &TFTPFComponent{err: ErrMalformed}
+	}
 	return NewTFTPFComponent(PFCompDot1QSTAGPCPDEI, []byte{pcpdei})
 }
 
@@ -491,6 +550,9 @@ func NewTFTPFComponentEthertype(etype uint16) *TFTPFComponent {
 
 // IPv4RemoteAddress returns IPv4RemoteAddress in net.IPNet if the type of component matches.
 func (c *TFTPFComponent) IPv4RemoteAddress() (*net.IPNet, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	if c.Type != PFCompIPv4RemoteAddress {
 		return nil, ErrInvalidType
 	}
@@ -503,6 +565,9 @@ func (c *TFTPFComponent) IPv4RemoteAddress() (*net.IPNet, error) {
 
 // IPv4LocalAddress returns IPv4LocalAddress in net.IPNet if the type of component matches.
 func (c *TFTPFComponent) IPv4LocalAddress() (*net.IPNet, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	if c.Type != PFCompIPv4LocalAddress {
 		return nil, ErrInvalidType
 	}
@@ -515,6 +580,9 @@ func (c *TFTPFComponent) IPv4LocalAddress() (*net.IPNet, error) {
 
 // IPv6RemoteAddress returns IPv6RemoteAddress in net.IPNet if the type of component matches.
 func (c *TFTPFComponent) IPv6RemoteAddress() (*net.IPNet, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	if c.Type != PFCompIPv6RemoteAddress {
 		return nil, ErrInvalidType
 	}
@@ -522,12 +590,16 @@ func (c *TFTPFComponent) IPv6RemoteAddress() (*net.IPNet, error) {
 		return nil, io.ErrUnexpectedEOF
 	}
 
-	return &net.IPNet{IP: c.Contents[:16], Mask: c.Contents[17:32]}, nil
+	// TS 24.008 §10.5.6.12: 16 address octets followed by 16 mask octets.
+	return &net.IPNet{IP: c.Contents[:16], Mask: c.Contents[16:32]}, nil
 }
 
 // IPv6RemoteAddressPrefixLength returns IPv6RemoteAddressPrefixLength in *net.IPNet
 // if the type of component matches.
 func (c *TFTPFComponent) IPv6RemoteAddressPrefixLength() (*net.IPNet, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	if c.Type != PFCompIPv6RemoteAddressPrefixLength {
 		return nil, ErrInvalidType
 	}
@@ -535,9 +607,12 @@ func (c *TFTPFComponent) IPv6RemoteAddressPrefixLength() (*net.IPNet, error) {
 		return nil, io.ErrUnexpectedEOF
 	}
 
+	if c.Contents[16] > 128 {
+		return nil, ErrMalformed
+	}
 	ipnet := &net.IPNet{
 		IP:   net.IP(c.Contents[:16]),
-		Mask: net.CIDRMask(int(c.Contents[17]), 128),
+		Mask: net.CIDRMask(int(c.Contents[16]), 128),
 	}
 	return ipnet, nil
 }
@@ -545,6 +620,9 @@ func (c *TFTPFComponent) IPv6RemoteAddressPrefixLength() (*net.IPNet, error) {
 // IPv6LocalAddressPrefixLength returns IPv6LocalAddressPrefixLength in *net.IPNet
 // if the type of component matches.
 func (c *TFTPFComponent) IPv6LocalAddressPrefixLength() (*net.IPNet, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	if c.Type != PFCompIPv6LocalAddressPrefixLength {
 		return nil, ErrInvalidType
 	}
@@ -552,9 +630,12 @@ func (c *TFTPFComponent) IPv6LocalAddressPrefixLength() (*net.IPNet, error) {
 		return nil, io.ErrUnexpectedEOF
 	}
 
+	if c.Contents[16] > 128 {
+		return nil, ErrMalformed
+	}
 	ipnet := &net.IPNet{
 		IP:   net.IP(c.Contents[:16]),
-		Mask: net.CIDRMask(int(c.Contents[17]), 128),
+		Mask: net.CIDRMask(int(c.Contents[16]), 128),
 	}
 	return ipnet, nil
 }
@@ -562,6 +643,9 @@ func (c *TFTPFComponent) IPv6LocalAddressPrefixLength() (*net.IPNet, error) {
 // ProtocolIdentifierNextHeader returns ProtocolIdentifierNextHeader in uint8
 // if the type of component matches.
 func (c *TFTPFComponent) ProtocolIdentifierNextHeader() (uint8, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompProtocolIdentifierNextHeader {
 		return 0, ErrInvalidType
 	}
@@ -574,6 +658,9 @@ func (c *TFTPFComponent) ProtocolIdentifierNextHeader() (uint8, error) {
 
 // SingleLocalPort returns SingleLocalPort in uint16 if the type of component matches.
 func (c *TFTPFComponent) SingleLocalPort() (uint16, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompSingleLocalPort {
 		return 0, ErrInvalidType
 	}
@@ -587,6 +674,9 @@ func (c *TFTPFComponent) SingleLocalPort() (uint16, error) {
 // LocalPortRange returns LocalPortRange in two uint16(low, high) if the type of
 // component matches.
 func (c *TFTPFComponent) LocalPortRange() (uint16, uint16, error) {
+	if c == nil {
+		return 0, 0, ErrIENotFound
+	}
 	if c.Type != PFCompLocalPortRange {
 		return 0, 0, ErrInvalidType
 	}
@@ -601,6 +691,9 @@ func (c *TFTPFComponent) LocalPortRange() (uint16, uint16, error) {
 
 // SingleRemotePort returns SingleRemotePort in uint16 if the type of component matches.
 func (c *TFTPFComponent) SingleRemotePort() (uint16, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompSingleRemotePort {
 		return 0, ErrInvalidType
 	}
@@ -614,6 +707,9 @@ func (c *TFTPFComponent) SingleRemotePort() (uint16, error) {
 // RemotePortRange returns RemotePortRange in two uint16(low, high) if the type of
 // component matches.
 func (c *TFTPFComponent) RemotePortRange() (uint16, uint16, error) {
+	if c == nil {
+		return 0, 0, ErrIENotFound
+	}
 	if c.Type != PFCompRemotePortRange {
 		return 0, 0, ErrInvalidType
 	}
@@ -629,6 +725,9 @@ func (c *TFTPFComponent) RemotePortRange() (uint16, uint16, error) {
 // SecurityParameterIndex returns SecurityParameterIndex in uint32 if the type of
 // component matches.
 func (c *TFTPFComponent) SecurityParameterIndex() (uint32, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompSecurityParameterIndex {
 		return 0, ErrInvalidType
 	}
@@ -642,6 +741,9 @@ func (c *TFTPFComponent) SecurityParameterIndex() (uint32, error) {
 // TypeOfServiceTrafficClass returns TypeOfServiceTrafficClass in two uint8
 // (class, mask) if the type of component matches.
 func (c *TFTPFComponent) TypeOfServiceTrafficClass() (uint8, uint8, error) {
+	if c == nil {
+		return 0, 0, ErrIENotFound
+	}
 	if c.Type != PFCompTypeOfServiceTrafficClass {
 		return 0, 0, ErrInvalidType
 	}
@@ -654,6 +756,9 @@ func (c *TFTPFComponent) TypeOfServiceTrafficClass() (uint8, uint8, error) {
 
 // FlowLabel returns FlowLabel in uint32 if the type of component matches.
 func (c *TFTPFComponent) FlowLabel() (uint32, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.err != nil {
 		return 0, c.err
 	}
@@ -664,12 +769,15 @@ func (c *TFTPFComponent) FlowLabel() (uint32, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return utils.Uint24To32(c.Contents[:3]), nil
+	return utils.Uint24To32(c.Contents[:3]) & 0xfffff, nil
 }
 
 // DestinationMACAddress returns DestinationMACAddress in net.HardwareAddr if
 // the type of component matches.
 func (c *TFTPFComponent) DestinationMACAddress() (net.HardwareAddr, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	if c.Type != PFCompDestinationMACAddress {
 		return nil, ErrInvalidType
 	}
@@ -683,6 +791,9 @@ func (c *TFTPFComponent) DestinationMACAddress() (net.HardwareAddr, error) {
 // SourceMACAddress returns SourceMACAddress in net.HardwareAddr if the type of
 // component matches.
 func (c *TFTPFComponent) SourceMACAddress() (net.HardwareAddr, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	if c.Type != PFCompSourceMACAddress {
 		return nil, ErrInvalidType
 	}
@@ -695,6 +806,9 @@ func (c *TFTPFComponent) SourceMACAddress() (net.HardwareAddr, error) {
 
 // Dot1QCTAGVID returns Dot1QCTAGVID in uint16 if the type of component matches.
 func (c *TFTPFComponent) Dot1QCTAGVID() (uint16, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompDot1QCTAGVID {
 		return 0, ErrInvalidType
 	}
@@ -702,11 +816,14 @@ func (c *TFTPFComponent) Dot1QCTAGVID() (uint16, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return binary.BigEndian.Uint16(c.Contents[:2]), nil
+	return binary.BigEndian.Uint16(c.Contents[:2]) & 0xfff, nil
 }
 
 // Dot1QSTAGVID returns Dot1QSTAGVID in uint16 if the type of component matches.
 func (c *TFTPFComponent) Dot1QSTAGVID() (uint16, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompDot1QSTAGVID {
 		return 0, ErrInvalidType
 	}
@@ -714,11 +831,14 @@ func (c *TFTPFComponent) Dot1QSTAGVID() (uint16, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return binary.BigEndian.Uint16(c.Contents[:2]), nil
+	return binary.BigEndian.Uint16(c.Contents[:2]) & 0xfff, nil
 }
 
 // Dot1QCTAGPCPDEI returns Dot1QCTAGPCPDEI in uint8 if the type of component matches.
 func (c *TFTPFComponent) Dot1QCTAGPCPDEI() (uint8, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompDot1QCTAGPCPDEI {
 		return 0, ErrInvalidType
 	}
@@ -726,11 +846,14 @@ func (c *TFTPFComponent) Dot1QCTAGPCPDEI() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return c.Contents[0], nil
+	return c.Contents[0] & 15, nil
 }
 
 // Dot1QSTAGPCPDEI returns Dot1QSTAGPCPDEI in uint8 if the type of component matches.
 func (c *TFTPFComponent) Dot1QSTAGPCPDEI() (uint8, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompDot1QSTAGPCPDEI {
 		return 0, ErrInvalidType
 	}
@@ -738,11 +861,14 @@ func (c *TFTPFComponent) Dot1QSTAGPCPDEI() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return c.Contents[0], nil
+	return c.Contents[0] & 15, nil
 }
 
 // Ethertype returns Ethertype in uint16 if the type of component matches.
 func (c *TFTPFComponent) Ethertype() (uint16, error) {
+	if c == nil {
+		return 0, ErrIENotFound
+	}
 	if c.Type != PFCompEthertype {
 		return 0, ErrInvalidType
 	}
@@ -755,6 +881,9 @@ func (c *TFTPFComponent) Ethertype() (uint16, error) {
 
 // Marshal serializes TFTPFComponent.
 func (c *TFTPFComponent) Marshal() ([]byte, error) {
+	if c == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, c.MarshalLen())
 	if err := c.MarshalTo(b); err != nil {
 		return nil, err
@@ -765,6 +894,15 @@ func (c *TFTPFComponent) Marshal() ([]byte, error) {
 
 // MarshalTo serializes TFTPFComponent into b.
 func (c *TFTPFComponent) MarshalTo(b []byte) error {
+	if c == nil {
+		return ErrIENotFound
+	}
+	if err := c.validate(); err != nil {
+		return err
+	}
+	if len(b) < c.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	if c.err != nil {
 		return c.err
 	}
@@ -804,6 +942,10 @@ func ParseMultiTFTPFComponent(b []byte) ([]*TFTPFComponent, error) {
 
 // UnmarshalBinary decodes given bytes into TFTPFComponent.
 func (c *TFTPFComponent) UnmarshalBinary(b []byte) error {
+	if c == nil {
+		return ErrIENotFound
+	}
+	*c = TFTPFComponent{}
 	l := len(b)
 	if l < 1 {
 		return io.ErrUnexpectedEOF
@@ -839,17 +981,22 @@ func (c *TFTPFComponent) UnmarshalBinary(b []byte) error {
 		n = 1
 	case PFCompEthertype:
 		n = 2
+	default:
+		return ErrInvalidType
 	}
 
 	if l < 1+n {
 		return io.ErrUnexpectedEOF
 	}
 	c.Contents = b[1 : 1+n]
-	return nil
+	return c.validate()
 }
 
 // MarshalLen returns the serial length of TFTPFComponent in int.
 func (c *TFTPFComponent) MarshalLen() int {
+	if c == nil {
+		return 0
+	}
 	return 1 + len(c.Contents)
 }
 
@@ -878,6 +1025,9 @@ func NewTFTParameter(id uint8, contents []byte) *TFTParameter {
 
 // Marshal serializes TFTParameter.
 func (p *TFTParameter) Marshal() ([]byte, error) {
+	if p == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, p.MarshalLen())
 	if err := p.MarshalTo(b); err != nil {
 		return nil, err
@@ -888,6 +1038,15 @@ func (p *TFTParameter) Marshal() ([]byte, error) {
 
 // MarshalTo serializes TFTParameter into b.
 func (p *TFTParameter) MarshalTo(b []byte) error {
+	if p == nil {
+		return ErrIENotFound
+	}
+	if len(p.Contents) > 255 || int(p.Length) != len(p.Contents) {
+		return ErrInvalidLength
+	}
+	if len(b) < p.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
@@ -931,6 +1090,10 @@ func ParseMultiTFTParameters(b []byte) ([]*TFTParameter, error) {
 
 // UnmarshalBinary decodes given bytes into TFTParameter.
 func (p *TFTParameter) UnmarshalBinary(b []byte) error {
+	if p == nil {
+		return ErrIENotFound
+	}
+	*p = TFTParameter{}
 	l := len(b)
 	if l < 2 {
 		return io.ErrUnexpectedEOF
@@ -948,10 +1111,90 @@ func (p *TFTParameter) UnmarshalBinary(b []byte) error {
 
 // SetLength sets the length in TFTParameter.
 func (p *TFTParameter) SetLength() {
+	if p == nil {
+		return
+	}
 	p.Length = uint8(len(p.Contents))
 }
 
 // MarshalLen returns the serial length of TFTParameter in int.
 func (p *TFTParameter) MarshalLen() int {
+	if p == nil {
+		return 0
+	}
 	return 2 + len(p.Contents)
+}
+
+// TS 24.008 §10.5.6.12, Table 10.5.162: operation-dependent filter lists.
+func (f *TrafficFlowTemplate) validate() error {
+	if f.OperationCode > 6 || f.OperationCode == 0 && len(f.Parameters) != 0 || f.OperationCode == TFTOpNoTFTOperation && len(f.Parameters) == 0 {
+		return ErrMalformed
+	}
+	if len(f.PacketFilters) > 15 || len(f.PacketFilterIdentifiers) > 15 {
+		return ErrInvalidLength
+	}
+	switch f.OperationCode {
+	case TFTOpCreateNewTFT, TFTOpAddPacketFiltersToExistingTFT, TFTOpReplacePacketFiltersInExistingTFT:
+		if len(f.PacketFilters) == 0 || len(f.PacketFilterIdentifiers) != 0 {
+			return ErrMalformed
+		}
+	case TFTOpDeletePacketFiltersFromExistingTFT:
+		if len(f.PacketFilters) != 0 || len(f.PacketFilterIdentifiers) == 0 {
+			return ErrMalformed
+		}
+	default:
+		if len(f.PacketFilters) != 0 || len(f.PacketFilterIdentifiers) != 0 {
+			return ErrMalformed
+		}
+	}
+	for _, id := range f.PacketFilterIdentifiers {
+		if id > 15 {
+			return ErrMalformed
+		}
+	}
+	for _, p := range f.PacketFilters {
+		if p == nil {
+			return ErrMalformed
+		}
+	}
+	for _, p := range f.Parameters {
+		if p == nil {
+			return ErrMalformed
+		}
+	}
+	return nil
+}
+
+func (c *TFTPFComponent) validate() error {
+	if c.err != nil {
+		return c.err
+	}
+	n := 0
+	switch c.Type {
+	case PFCompIPv4RemoteAddress, PFCompIPv4LocalAddress:
+		n = 8
+	case PFCompIPv6RemoteAddress:
+		n = 32
+	case PFCompIPv6RemoteAddressPrefixLength, PFCompIPv6LocalAddressPrefixLength:
+		n = 17
+	case PFCompProtocolIdentifierNextHeader, PFCompDot1QCTAGPCPDEI, PFCompDot1QSTAGPCPDEI:
+		n = 1
+	case PFCompSingleLocalPort, PFCompSingleRemotePort, PFCompTypeOfServiceTrafficClass, PFCompDot1QCTAGVID, PFCompDot1QSTAGVID, PFCompEthertype:
+		n = 2
+	case PFCompLocalPortRange, PFCompRemotePortRange, PFCompSecurityParameterIndex:
+		n = 4
+	case PFCompFlowLabel:
+		n = 3
+	case PFCompDestinationMACAddress, PFCompSourceMACAddress:
+		n = 6
+	default:
+		return ErrInvalidType
+	}
+	if len(c.Contents) != n {
+		return ErrInvalidLength
+	}
+	if n == 17 && c.Contents[16] > 128 {
+		return ErrMalformed
+	}
+	return nil
 }

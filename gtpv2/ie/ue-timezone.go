@@ -12,6 +12,10 @@ import (
 
 // NewUETimeZone creates a new UETimeZone IE.
 func NewUETimeZone(tz time.Duration, daylightSaving uint8) *IE {
+	// TS 29.274 §8.44 and TS 24.008 §10.5.3.8: signed quarter-hours.
+	if tz%(15*time.Minute) != 0 || tz < -79*15*time.Minute || tz > 79*15*time.Minute || daylightSaving > 2 {
+		return newErrorIE(UETimeZone, ErrMalformed)
+	}
 	i := New(UETimeZone, 0x00, make([]byte, 2))
 	min := tz.Minutes() / 15
 	absMin := int(math.Abs(min))
@@ -27,6 +31,9 @@ func NewUETimeZone(tz time.Duration, daylightSaving uint8) *IE {
 
 // TimeZone returns TimeZone in time.Duration if the type of IE matches.
 func (i *IE) TimeZone() (time.Duration, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != UETimeZone {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -52,6 +59,9 @@ func (i *IE) MustTimeZone() time.Duration {
 
 // DaylightSaving returns DaylightSaving in uint8 if the type of IE matches.
 func (i *IE) DaylightSaving() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != UETimeZone {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -59,12 +69,15 @@ func (i *IE) DaylightSaving() (uint8, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	return i.Payload[1], nil
+	return i.Payload[1] & 3, nil
 }
 
 // MustDaylightSaving returns DaylightSaving in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustDaylightSaving() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.DaylightSaving()
 	return v
 }

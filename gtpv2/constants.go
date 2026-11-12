@@ -164,8 +164,8 @@ const (
 
 // CSG Membership Indication definitions.
 const (
-	CMINonCSG uint8 = iota
-	CMICSG
+	CMICSG uint8 = iota
+	CMINonCSG
 )
 
 // Detach Type definitions.
@@ -182,14 +182,14 @@ const (
 	NodeIDOther
 )
 
-// Node Type definitions.
+// Node Type values (TS 29.274 §8.65).
 const (
-	NodeTypeSGSN uint8 = iota
-	NodeTypeMME
+	NodeTypeMME uint8 = iota
+	NodeTypeSGSN
 )
 
 // Protocol ID definitions.
-// For more identifiers, see RFC 3232.
+// For more identifiers, see RFC 3232, Description.
 const (
 	ProtoIDLCP  uint16 = 0xc021
 	ProtoIDPAP  uint16 = 0xc023
@@ -248,6 +248,7 @@ const (
 	PDNTypeIPv6
 	PDNTypeIPv4v6
 	PDNTypeNonIP
+	PDNTypeEthernet
 )
 
 // Protocol Type definitions.
@@ -282,6 +283,18 @@ const (
 	RATTypeEUTRANNBIoT
 	RATTypeLTEM
 	RATTypeNR
+	RATTypeEUTRANLEO
+	RATTypeEUTRANMEO
+	RATTypeEUTRANGEO
+	RATTypeEUTRANOtherSatellite
+	RATTypeEUTRANNBIoTLEO
+	RATTypeEUTRANNBIoTMEO
+	RATTypeEUTRANNBIoTGEO
+	RATTypeEUTRANNBIoTOtherSatellite
+	RATTypeLTEMLEO
+	RATTypeLTEMMEO
+	RATTypeLTEMGEO
+	RATTypeLTEMOtherSatellite
 )
 
 // SelectionMode definitions.
@@ -309,4 +322,18 @@ const (
 	DaylightSavingNoAdjustment uint8 = iota
 	DaylightSavingPlusOneHour
 	DaylightSavingPlusTwoHours
+)
+
+// UCI membership uses the reverse encoding of the CMI IE (TS 29.274 §8.75).
+const (
+	UCINonCSG uint8 = 0
+	UCICSG    uint8 = 1
+)
+
+// Additional Cause values from TS 29.274 Table 8.4-1.
+const (
+	CauseEPSTo5GSMobility                          uint8 = 15
+	Cause5GCNotAllowed                             uint8 = 129
+	CausePGWMismatchWithNetworkSliceSubscribedByUE uint8 = 130
+	CauseRejectionDueToPagingRestriction           uint8 = 131
 )

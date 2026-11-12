@@ -9,6 +9,12 @@ Constructors retain invalid input errors in the returned IE; Err and accessors
 report them, and Marshal/MarshalTo propagate them, including through messages.
 MarshalLen returns zero for nil IEs and IEs carrying construction errors.
 Nil IEs report ErrIENotFound. Must and Has helpers return zero values on errors.
+
+Decoding checks outer TLIV framing. Invalid grouped contents are retained with
+an error reported by Err and typed accessors, so a message can skip unexpected
+or optional IEs per TS 29.274 §§7.7.1, 7.7.9. ChildIEs contains the decoded list
+when grouping succeeds; Payload always retains the received group bytes.
+Encoding rejects invalid grouped contents, including tolerated received errors.
 */
 package ie
 
@@ -169,15 +175,16 @@ const (
 
 // IE is a GTPv2 Information Element.
 type IE struct {
-	err      error
-	Type     uint8
-	Length   uint16
-	instance uint8
-	Payload  []byte
-	ChildIEs []*IE
+	err        error
+	contentErr error
+	Type       uint8
+	Length     uint16
+	instance   uint8
+	Payload    []byte
+	ChildIEs   []*IE
 }
 
-// Err reports a construction error, including the IE type, or ErrIENotFound
+// Err reports a construction or grouped-content error, including the IE type, or ErrIENotFound
 // for a nil receiver. Errors remain available through errors.Is/errors.As.
 func (i *IE) Err() error {
 	if i == nil {
@@ -185,6 +192,9 @@ func (i *IE) Err() error {
 	}
 	if i.err != nil {
 		return fmt.Errorf("IE type %d: %w", i.Type, i.err)
+	}
+	if i.contentErr != nil {
+		return fmt.Errorf("IE type %d instance %d: %w", i.Type, i.Instance(), i.contentErr)
 	}
 	return nil
 }
@@ -195,13 +205,22 @@ func newErrorIE(t uint8, err error) *IE {
 
 // New creates new IE.
 func New(itype, ins uint8, data []byte) *IE {
+	if ins > 15 {
+		return newErrorIE(itype, ErrMalformed)
+	}
 	ie := &IE{
 		Type:     itype,
 		instance: ins & 0x0f,
 		Payload:  data,
 	}
+	if ie.IsGrouped() && len(data) != 0 {
+		children, err := ParseMultiIEs(data)
+		if err != nil {
+			return newErrorIE(itype, err)
+		}
+		ie.ChildIEs = children
+	}
 	ie.SetLength()
-
 	return ie
 }
 
@@ -210,7 +229,11 @@ func (i *IE) SetInstance(ins uint8) {
 	if i == nil {
 		return
 	}
-	i.instance = ins & 0x0f
+	if ins > 15 {
+		i.err = ErrMalformed
+		return
+	}
+	i.instance = ins
 }
 
 // WithInstance sets the instance and returns IE.
@@ -218,7 +241,7 @@ func (i *IE) WithInstance(ins uint8) *IE {
 	if i == nil {
 		return nil
 	}
-	i.instance = ins & 0x0f
+	i.SetInstance(ins)
 	return i
 }
 
@@ -232,6 +255,9 @@ func (i *IE) Instance() uint8 {
 
 // Marshal returns the byte sequence generated from an IE instance.
 func (i *IE) Marshal() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	b := make([]byte, i.MarshalLen())
 	if err := i.MarshalTo(b); err != nil {
 		return nil, err
@@ -241,6 +267,9 @@ func (i *IE) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (i *IE) MarshalTo(b []byte) error {
+	if len(b) < i.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	if err := i.Err(); err != nil {
 		return err
 	}
@@ -248,12 +277,12 @@ func (i *IE) MarshalTo(b []byte) error {
 	if l < i.MarshalLen() {
 		return ErrTooShortToMarshal
 	}
-	if i.MarshalLen()-4 > 0xffff || int(i.Length) != i.MarshalLen()-4 {
+	if i.MarshalLen()-4 > 0xffff || !i.IsGrouped() && int(i.Length) != i.MarshalLen()-4 {
 		return fmt.Errorf("IE type %d: %w", i.Type, ErrInvalidLength)
 	}
 
 	b[0] = i.Type
-	binary.BigEndian.PutUint16(b[1:3], i.Length)
+	binary.BigEndian.PutUint16(b[1:3], uint16(i.MarshalLen()-4))
 	b[3] = i.instance & 0x0f
 	if i.IsGrouped() {
 		offset := 4
@@ -304,9 +333,9 @@ func (i *IE) UnmarshalBinary(b []byte) error {
 	if i.IsGrouped() {
 		var err error
 		i.ChildIEs, err = ParseMultiIEs(i.Payload)
-		if err != nil {
-			return err
-		}
+		// TS 29.274 §§7.7.1, 7.7.9: content of an unexpected group must
+		// not reject its container. Retain the raw payload and defer the error.
+		i.contentErr = err
 	}
 
 	return nil
@@ -316,6 +345,9 @@ func (i *IE) UnmarshalBinary(b []byte) error {
 func (i *IE) MarshalLen() int {
 	if i == nil || i.err != nil {
 		return 0
+	}
+	if i.contentErr != nil {
+		return 4 + len(i.Payload)
 	}
 	if i.IsGrouped() {
 		l := 4
@@ -329,7 +361,7 @@ func (i *IE) MarshalLen() int {
 
 // SetLength sets the length in Length field.
 func (i *IE) SetLength() {
-	if i == nil {
+	if i == nil || i.contentErr != nil {
 		return
 	}
 	if i.IsGrouped() {
@@ -342,6 +374,15 @@ func (i *IE) SetLength() {
 			return
 		}
 		i.Length = uint16(l)
+		i.Payload = make([]byte, l)
+		offset := 0
+		for _, child := range i.ChildIEs {
+			if err := child.MarshalTo(i.Payload[offset:]); err != nil {
+				i.err = err
+				return
+			}
+			offset += child.MarshalLen()
+		}
 		return
 	}
 	if len(i.Payload) > 0xffff {
@@ -388,35 +429,47 @@ func ParseMultiIEs(b []byte) ([]*IE, error) {
 			return nil, err
 		}
 		ies = append(ies, i)
-		b = b[i.MarshalLen():]
+		b = b[4+int(i.Length):]
 	}
 	return ies, nil
 }
 
 // NewUint8IE creates a new IE with uint8 value.
 func NewUint8IE(t, v uint8) *IE {
+	if (&IE{Type: t}).IsGrouped() {
+		return newErrorIE(t, ErrInvalidType)
+	}
 	return New(t, 0x00, []byte{v})
 }
 
 // NewUint16IE creates a new IE with uint16 value.
 func NewUint16IE(t uint8, v uint16) *IE {
-	i := New(t, 0x00, make([]byte, 2))
-	binary.BigEndian.PutUint16(i.Payload, v)
-	return i
+	if (&IE{Type: t}).IsGrouped() {
+		return newErrorIE(t, ErrInvalidType)
+	}
+	b := make([]byte, 2)
+	binary.BigEndian.PutUint16(b, v)
+	return New(t, 0x00, b)
 }
 
 // NewUint32IE creates a new IE with uint32 value.
 func NewUint32IE(t uint8, v uint32) *IE {
-	i := New(t, 0x00, make([]byte, 4))
-	binary.BigEndian.PutUint32(i.Payload, v)
-	return i
+	if (&IE{Type: t}).IsGrouped() {
+		return newErrorIE(t, ErrInvalidType)
+	}
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, v)
+	return New(t, 0x00, b)
 }
 
 // NewUint64IE creates a new IE with uint64 value.
 func NewUint64IE(t uint8, v uint64) *IE {
-	i := New(t, 0x00, make([]byte, 8))
-	binary.BigEndian.PutUint64(i.Payload, v)
-	return i
+	if (&IE{Type: t}).IsGrouped() {
+		return newErrorIE(t, ErrInvalidType)
+	}
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, v)
+	return New(t, 0x00, b)
 }
 
 // NewStringIE creates a new IE with string value.
@@ -568,8 +621,8 @@ var ieTypeNameMap = map[uint8]string{
 	117: "GUTI",
 	118: "FContainer",
 	119: "FCause",
-	121: "PLMNID",
-	122: "TargetIdentification",
+	120: "PLMNID",
+	121: "TargetIdentification",
 	123: "PacketFlowID",
 	124: "RABContext",
 	125: "SourceRNCPDCPContextInfo",

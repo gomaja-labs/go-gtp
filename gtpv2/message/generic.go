@@ -18,9 +18,13 @@ type Generic struct {
 
 // NewGeneric creates a new Generic.
 func NewGeneric(msgType uint8, teid, seq uint32, ie ...*ie.IE) *Generic {
+	teidFlag := 0
+	if requiresTEID(msgType) {
+		teidFlag = 1
+	}
 	g := &Generic{
 		Header: NewHeader(
-			NewHeaderFlags(2, 0x00, 1),
+			NewHeaderFlags(2, 0, teidFlag),
 			msgType,
 			teid, seq,
 			nil,
@@ -28,7 +32,6 @@ func NewGeneric(msgType uint8, teid, seq uint32, ie ...*ie.IE) *Generic {
 		IEs: ie,
 	}
 	g.SetLength()
-
 	return g
 }
 
@@ -42,6 +45,7 @@ func NewGenericWithoutTEID(msgType uint8, teid, seq uint32, ie ...*ie.IE) *Gener
 		IEs: ie,
 	}
 
+	g.SetLength()
 	return g
 }
 
@@ -57,6 +61,15 @@ func (g *Generic) Marshal() ([]byte, error) {
 
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (g *Generic) MarshalTo(b []byte) error {
+	if g == nil || g.Header == nil {
+		return ErrNilMessage
+	}
+	if err := g.Header.validate(g.Type, g.MarshalLen()); err != nil {
+		return err
+	}
+	if len(b) < g.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	if g.Header.Payload != nil {
 		g.Header.Payload = nil
 	}
@@ -88,12 +101,16 @@ func ParseGeneric(b []byte) (*Generic, error) {
 
 // UnmarshalBinary decodes a given byte sequence as a Generic.
 func (g *Generic) UnmarshalBinary(b []byte) error {
+	if g == nil {
+		return ErrNilMessage
+	}
+	*g = Generic{}
 	var err error
 	g.Header, err = ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(g.Header.Payload) < 2 {
+	if len(g.Header.Payload) == 0 {
 		return nil
 	}
 
@@ -106,6 +123,9 @@ func (g *Generic) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of Data.
 func (g *Generic) MarshalLen() int {
+	if g == nil || g.Header == nil {
+		return 0
+	}
 	l := g.Header.MarshalLen() - len(g.Header.Payload)
 
 	for _, ie := range g.IEs {
@@ -120,20 +140,21 @@ func (g *Generic) MarshalLen() int {
 
 // SetLength sets the length in Length field.
 func (g *Generic) SetLength() {
-	l := g.Header.MarshalLen() - len(g.Header.Payload) - 4
-	for _, ie := range g.IEs {
-		l += ie.MarshalLen()
+	if g != nil && g.Header != nil {
+		g.Header.setLength(g.MarshalLen() - g.Header.piggybackLen() - 4)
 	}
-	g.Header.Length = uint16(l)
 }
 
 // MessageTypeName returns the name of protocol.
 func (g *Generic) MessageTypeName() string {
-	return fmt.Sprintf("Unknown (%d)", g.Header.Type)
+	return fmt.Sprintf("Unknown (%d)", g.GetHeader().MessageType())
 }
 
 // TEID returns the TEID in uint32.
 func (g *Generic) TEID() uint32 {
+	if g == nil {
+		return 0
+	}
 	return g.Header.teid()
 }
 
@@ -142,3 +163,45 @@ func (g *Generic) AddIE(ie ...*ie.IE) {
 	g.IEs = append(g.IEs, ie...)
 	g.SetLength()
 }
+
+func (g *Generic) GetHeader() *Header {
+	if g == nil {
+		return nil
+	}
+	return g.Header
+}
+
+// Version reads the common header, returning zero for a nil receiver.
+func (g *Generic) Version() int { return g.GetHeader().Version() }
+
+// MessageType reads the common header, returning zero for a nil receiver.
+func (g *Generic) MessageType() uint8 { return g.GetHeader().MessageType() }
+
+// Sequence reads the common header, returning zero for a nil receiver.
+func (g *Generic) Sequence() uint32 { return g.GetHeader().Sequence() }
+
+// IsPiggybacking reads the common header, returning zero for a nil receiver.
+func (g *Generic) IsPiggybacking() bool { return g.GetHeader().IsPiggybacking() }
+
+// HasTEID reads the common header, returning zero for a nil receiver.
+func (g *Generic) HasTEID() bool { return g.GetHeader().HasTEID() }
+
+// HasMessagePriority reads the common header, returning zero for a nil receiver.
+func (g *Generic) HasMessagePriority() bool { return g.GetHeader().HasMessagePriority() }
+
+// MessagePriority reads the common header, returning zero for a nil receiver.
+func (g *Generic) MessagePriority() uint8 { return g.GetHeader().MessagePriority() }
+
+// SetSequenceNumber updates the common header safely on a nil receiver.
+func (g *Generic) SetSequenceNumber(seq uint32) error { return g.GetHeader().SetSequenceNumber(seq) }
+
+// SetMessagePriority updates the common header safely on a nil receiver.
+func (g *Generic) SetMessagePriority(priority uint8) error {
+	return g.GetHeader().SetMessagePriority(priority)
+}
+
+// SetTEID updates the common header safely on a nil receiver.
+func (g *Generic) SetTEID(teid uint32) { g.GetHeader().SetTEID(teid) }
+
+// SetPiggybacking updates the common header safely on a nil receiver.
+func (g *Generic) SetPiggybacking(value uint8) { g.GetHeader().SetPiggybacking(value) }

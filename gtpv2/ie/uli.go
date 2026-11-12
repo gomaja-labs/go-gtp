@@ -38,16 +38,6 @@ type PLMN struct {
 	MNC string
 }
 
-// MCCFromPLMN gets MCC from PLMN.
-func (plmn *PLMN) MCCFromPLMN() string {
-	return plmn.MCC
-}
-
-// MNCFromPLMN gets MNC from PLMN.
-func (plmn *PLMN) MNCFromPLMN() string {
-	return plmn.MNC
-}
-
 // CGI represents a CGI, which is defined to be used as a field of UserLocationInformation IE.
 type CGI struct {
 	*PLMN
@@ -66,6 +56,9 @@ func NewCGI(mcc, mnc string, lac, ci uint16) *CGI {
 
 // HasCGI checks if UserLocationInformationFields has CGI.
 func (f *UserLocationInformationFields) HasCGI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagCGI != 0
 }
 
@@ -87,6 +80,9 @@ func NewSAI(mcc, mnc string, lac, sac uint16) *SAI {
 
 // HasSAI checks if UserLocationInformationFields has SAI.
 func (f *UserLocationInformationFields) HasSAI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagSAI != 0
 }
 
@@ -94,11 +90,11 @@ func (f *UserLocationInformationFields) HasSAI() bool {
 type RAI struct {
 	*PLMN
 	LAC uint16
-	RAC uint16
+	RAC uint8
 }
 
 // NewRAI creates a new RAI.
-func NewRAI(mcc, mnc string, lac, rac uint16) *RAI {
+func NewRAI(mcc, mnc string, lac uint16, rac uint8) *RAI {
 	return &RAI{
 		PLMN: &PLMN{MCC: mcc, MNC: mnc},
 		LAC:  lac,
@@ -108,6 +104,9 @@ func NewRAI(mcc, mnc string, lac, rac uint16) *RAI {
 
 // HasRAI checks if UserLocationInformationFields has RAI.
 func (f *UserLocationInformationFields) HasRAI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagRAI != 0
 }
 
@@ -127,6 +126,9 @@ func NewTAI(mcc, mnc string, tac uint16) *TAI {
 
 // HasTAI checks if UserLocationInformationFields has TAI.
 func (f *UserLocationInformationFields) HasTAI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagTAI != 0
 }
 
@@ -140,12 +142,15 @@ type ECGI struct {
 func NewECGI(mcc, mnc string, eci uint32) *ECGI {
 	return &ECGI{
 		PLMN: &PLMN{MCC: mcc, MNC: mnc},
-		ECI:  eci & 0xfffffff,
+		ECI:  eci,
 	}
 }
 
 // HasECGI checks if UserLocationInformationFields has ECGI.
 func (f *UserLocationInformationFields) HasECGI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagECGI != 0
 }
 
@@ -165,6 +170,9 @@ func NewLAI(mcc, mnc string, lac uint16) *LAI {
 
 // HasLAI checks if UserLocationInformationFields has LAI.
 func (f *UserLocationInformationFields) HasLAI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagLAI != 0
 }
 
@@ -184,6 +192,9 @@ func NewMENBI(mcc, mnc string, menbi uint32) *MENBI {
 
 // HasMENBI checks if UserLocationInformationFields has MENBI.
 func (f *UserLocationInformationFields) HasMENBI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagMENBI != 0
 }
 
@@ -191,6 +202,7 @@ func (f *UserLocationInformationFields) HasMENBI() bool {
 type EMENBI struct {
 	*PLMN
 	EMENBI uint32
+	Short  bool
 }
 
 // NewEMENBI creates a new EMENBI.
@@ -203,12 +215,15 @@ func NewEMENBI(mcc, mnc string, menbi uint32) *EMENBI {
 
 // HasEMENBI checks if UserLocationInformationFields has EMENBI.
 func (f *UserLocationInformationFields) HasEMENBI() bool {
+	if f == nil {
+		return false
+	}
 	return f.Flags&uliFlagEMENBI != 0
 }
 
-// NewUserLocationInformationStruct creates a new UserLocationInformation IE from
+// NewUserLocationInformation creates a new UserLocationInformation IE from
 // the structs defined in gtpv2/ie package. Give nil for unnecessary values.
-func NewUserLocationInformationStruct(cgi *CGI, sai *SAI, rai *RAI, tai *TAI, ecgi *ECGI, lai *LAI, menbi *MENBI, emenbi *EMENBI) *IE {
+func NewUserLocationInformation(cgi *CGI, sai *SAI, rai *RAI, tai *TAI, ecgi *ECGI, lai *LAI, menbi *MENBI, emenbi *EMENBI) *IE {
 	v := NewUserLocationInformationFields(cgi, sai, rai, tai, ecgi, lai, menbi, emenbi)
 	b, err := v.Marshal()
 	if err != nil {
@@ -290,6 +305,9 @@ func NewUserLocationInformationFields(cgi *CGI, sai *SAI, rai *RAI, tai *TAI, ec
 
 // Marshal serializes UserLocationInformationFields.
 func (f *UserLocationInformationFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -300,6 +318,47 @@ func (f *UserLocationInformationFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes UserLocationInformationFields.
 func (f *UserLocationInformationFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	// TS 29.274 §§8.21.7-8.21.8: at most one eNodeB identity.
+	if f.Flags&0xc0 == 0xc0 {
+		return ErrMalformed
+	}
+	if f.EMENBI != nil && f.EMENBI.Short && f.EMENBI.EMENBI > 0x3ffff {
+		return ErrMalformed
+	}
+	if f.ECGI != nil && f.ECGI.ECI > 0xfffffff || f.MENBI != nil && f.MENBI.MENBI > 0xfffff || f.EMENBI != nil && f.EMENBI.EMENBI > 0x1fffff {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagCGI != 0 && (f.CGI == nil || f.CGI.PLMN == nil) {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagSAI != 0 && (f.SAI == nil || f.SAI.PLMN == nil) {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagRAI != 0 && (f.RAI == nil || f.RAI.PLMN == nil) {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagTAI != 0 && (f.TAI == nil || f.TAI.PLMN == nil) {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagECGI != 0 && (f.ECGI == nil || f.ECGI.PLMN == nil) {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagLAI != 0 && (f.LAI == nil || f.LAI.PLMN == nil) {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagMENBI != 0 && (f.MENBI == nil || f.MENBI.PLMN == nil) {
+		return ErrMalformed
+	}
+	if f.Flags&uliFlagEMENBI != 0 && (f.EMENBI == nil || f.EMENBI.PLMN == nil) {
+		return ErrMalformed
+	}
+
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 1 {
 		return io.ErrUnexpectedEOF
@@ -347,7 +406,8 @@ func (f *UserLocationInformationFields) MarshalTo(b []byte) error {
 		}
 		copy(b[offset:offset+3], plmn)
 		binary.BigEndian.PutUint16(b[offset+3:offset+5], f.RAI.LAC)
-		binary.BigEndian.PutUint16(b[offset+5:offset+7], f.RAI.RAC)
+		// TS 29.274 §8.21.3: RAC followed by 0xff.
+		b[offset+5], b[offset+6] = f.RAI.RAC, 0xff
 		offset += railen
 	}
 	if has4thBit(f.Flags) { // TAI
@@ -421,6 +481,9 @@ func (f *UserLocationInformationFields) MarshalTo(b []byte) error {
 			return err
 		}
 		copy(b[offset+3:offset+6], encoded)
+		if f.EMENBI.Short {
+			b[offset+3] |= 0x80
+		}
 	}
 
 	return nil
@@ -438,11 +501,18 @@ func ParseUserLocationInformationFields(b []byte) (*UserLocationInformationField
 
 // UnmarshalBinary decodes given bytes into UserLocationInformationFields.
 func (f *UserLocationInformationFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = UserLocationInformationFields{}
 	l := len(b)
 	if l < 1 {
 		return io.ErrUnexpectedEOF
 	}
 	f.Flags = b[0]
+	if f.Flags&0xc0 == 0xc0 {
+		return ErrMalformed
+	}
 	offset := 1
 
 	var err error
@@ -485,7 +555,7 @@ func (f *UserLocationInformationFields) UnmarshalBinary(b []byte) error {
 			return err
 		}
 		f.RAI.LAC = binary.BigEndian.Uint16(b[offset+3 : offset+5])
-		f.RAI.RAC = binary.BigEndian.Uint16(b[offset+5 : offset+7])
+		f.RAI.RAC = b[offset+5]
 		offset += railen
 	}
 	if has4thBit(f.Flags) { // TAI
@@ -511,7 +581,7 @@ func (f *UserLocationInformationFields) UnmarshalBinary(b []byte) error {
 		if err != nil {
 			return err
 		}
-		f.ECGI.ECI = binary.BigEndian.Uint32(b[offset+3 : offset+7])
+		f.ECGI.ECI = binary.BigEndian.Uint32(b[offset+3:offset+7]) & 0xfffffff
 		offset += ecgilen
 	}
 	if has6thBit(f.Flags) { // LAI
@@ -537,7 +607,7 @@ func (f *UserLocationInformationFields) UnmarshalBinary(b []byte) error {
 		if err != nil {
 			return err
 		}
-		f.MENBI.MENBI = utils.Uint24To32(b[offset+3 : offset+6])
+		f.MENBI.MENBI = utils.Uint24To32(b[offset+3:offset+6]) & 0xfffff
 		offset += menbilen
 	}
 	if has8thBit(f.Flags) { // EMENBI
@@ -550,7 +620,11 @@ func (f *UserLocationInformationFields) UnmarshalBinary(b []byte) error {
 		if err != nil {
 			return err
 		}
-		f.EMENBI.EMENBI = utils.Uint24To32(b[offset+3 : offset+6])
+		f.EMENBI.EMENBI = utils.Uint24To32(b[offset+3:offset+6]) & 0x1fffff
+		f.EMENBI.Short = b[offset+3]&0x80 != 0
+		if f.EMENBI.Short {
+			f.EMENBI.EMENBI &= 0x3ffff
+		}
 	}
 
 	return nil
@@ -558,6 +632,9 @@ func (f *UserLocationInformationFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of UserLocationInformationFields in int.
 func (f *UserLocationInformationFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	l := 1
 
 	if has1stBit(f.Flags) {

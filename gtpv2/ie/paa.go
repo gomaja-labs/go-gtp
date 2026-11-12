@@ -23,15 +23,21 @@ const (
 // The PDN Type field is automatically judged by the format of given addr,
 // If it cannot be converted as neither IPv4 nor IPv6, PDN Type will be Non-IP.
 //
-// NOTE: IPv6 Prefix Length will be set to 0 when an IPv6 address is given to this.
-// Use NewPDNAddressAllocationIPv6 instead to set the correct value.
+// IPv6 addresses use the /64 prefix specified by TS 29.274 §8.14.
 func NewPDNAddressAllocation(addr string) *IE {
-	return NewPDNAddressAllocationNetIP(net.ParseIP(addr), 0)
+	if addr != "" && net.ParseIP(addr) == nil {
+		return newErrorIE(PDNAddressAllocation, ErrMalformed)
+	}
+	return NewPDNAddressAllocationNetIP(net.ParseIP(addr), 64)
 }
 
 // NewPDNAddressAllocationIPv6 creates a new PDNAddressAllocation IE with IPv6 value.
 func NewPDNAddressAllocationIPv6(addr string, prefix uint8) *IE {
-	return NewPDNAddressAllocationNetIP(net.ParseIP(addr), prefix)
+	ip := net.ParseIP(addr)
+	if ip == nil || ip.To4() != nil {
+		return newErrorIE(PDNAddressAllocation, ErrMalformed)
+	}
+	return NewPDNAddressAllocationNetIP(ip, prefix)
 }
 
 // NewPDNAddressAllocationDual creates a new PDNAddressAllocation IE with
@@ -44,6 +50,9 @@ func NewPDNAddressAllocationDual(v4addr, v6addr string, v6prefix uint8) *IE {
 
 // NewPDNAddressAllocationNetIP creates a new PDNAddressAllocation IE from net.IP.
 func NewPDNAddressAllocationNetIP(ip net.IP, v6prefix uint8) *IE {
+	if len(ip) != 0 && ip.To16() == nil {
+		return newErrorIE(PDNAddressAllocation, ErrMalformed)
+	}
 	var v *PDNAddressAllocationFields
 	if v4 := ip.To4(); v4 != nil {
 		v = NewPDNAddressAllocationFields(pdnTypeIPv4, v4, nil, 0)
@@ -55,7 +64,7 @@ func NewPDNAddressAllocationNetIP(ip net.IP, v6prefix uint8) *IE {
 
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(PDNAddressAllocation, err)
 	}
 
 	return New(PDNAddressAllocation, 0x00, b)
@@ -67,7 +76,7 @@ func NewPDNAddressAllocationDualNetIP(v4, v6 net.IP, v6prefix uint8) *IE {
 	v := NewPDNAddressAllocationFields(pdnTypeIPv4v6, v4, v6, v6prefix)
 	b, err := v.Marshal()
 	if err != nil {
-		return nil
+		return newErrorIE(PDNAddressAllocation, err)
 	}
 
 	return New(PDNAddressAllocation, 0x00, b)
@@ -93,6 +102,9 @@ func NewPDNAddressAllocationFields(pType uint8, v4, v6 net.IP, prefix uint8) *PD
 
 // Marshal serializes PDNAddressAllocationFields.
 func (f *PDNAddressAllocationFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -103,6 +115,23 @@ func (f *PDNAddressAllocationFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes PDNAddressAllocationFields.
 func (f *PDNAddressAllocationFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	// TS 29.274 §8.14: PDN type and IPv6 prefix determine the fields.
+	if f.PDNType < 1 || f.PDNType > 5 || f.IPv6PrefixLength > 128 {
+		return ErrMalformed
+	}
+	if (f.PDNType == 1 || f.PDNType == 3) && f.IPv4Address.To4() == nil {
+		return ErrMalformed
+	}
+	// TS 29.274 §8.14: PAA has a fixed /64 IPv6 prefix.
+	if (f.PDNType == 2 || f.PDNType == 3) && (f.IPv6PrefixLength != 64 || f.IPv6Address.To16() == nil || f.IPv6Address.To4() != nil) {
+		return ErrMalformed
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 1 {
 		return io.ErrUnexpectedEOF
@@ -141,7 +170,7 @@ func (f *PDNAddressAllocationFields) MarshalTo(b []byte) error {
 		copy(b[offset+17:offset+21], f.IPv4Address.To4())
 
 		return nil
-	case pdnTypeNonIP: // no payload
+	case pdnTypeNonIP, 5: // no payload
 		return nil
 	default:
 		return nil
@@ -161,12 +190,19 @@ func ParsePDNAddressAllocationFields(b []byte) (*PDNAddressAllocationFields, err
 
 // UnmarshalBinary decodes given bytes into PDNAddressAllocationFields.
 func (f *PDNAddressAllocationFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = PDNAddressAllocationFields{}
 	l := len(b)
 	if l < 1 {
 		return io.ErrUnexpectedEOF
 	}
 
 	f.PDNType = b[0] & 0x07
+	if f.PDNType < 1 || f.PDNType > 5 {
+		return ErrMalformed
+	}
 	offset := 1
 
 	switch f.PDNType {
@@ -184,6 +220,9 @@ func (f *PDNAddressAllocationFields) UnmarshalBinary(b []byte) error {
 		}
 
 		f.IPv6PrefixLength = b[offset]
+		if f.IPv6PrefixLength != 64 {
+			return ErrMalformed
+		}
 		f.IPv6Address = b[offset+1 : offset+17]
 
 		return nil
@@ -193,11 +232,14 @@ func (f *PDNAddressAllocationFields) UnmarshalBinary(b []byte) error {
 		}
 
 		f.IPv6PrefixLength = b[offset]
+		if f.IPv6PrefixLength != 64 {
+			return ErrMalformed
+		}
 		f.IPv6Address = b[offset+1 : offset+17]
 		f.IPv4Address = b[offset+17 : offset+21]
 
 		return nil
-	case pdnTypeNonIP: // no payload
+	case pdnTypeNonIP, 5: // no payload
 		return nil
 	default:
 		return nil
@@ -206,6 +248,9 @@ func (f *PDNAddressAllocationFields) UnmarshalBinary(b []byte) error {
 
 // MarshalLen returns the serial length of PDNAddressAllocationFields in int.
 func (f *PDNAddressAllocationFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	l := 1
 	switch f.PDNType {
 	case pdnTypeIPv4:
@@ -214,7 +259,7 @@ func (f *PDNAddressAllocationFields) MarshalLen() int {
 		l += 17
 	case pdnTypeIPv4v6:
 		l += 21
-	case pdnTypeNonIP:
+	case pdnTypeNonIP, 5:
 		// no payload, do nothing
 	}
 

@@ -12,6 +12,10 @@ import (
 
 // NewMobileEquipmentIdentity creates a new MobileEquipmentIdentity IE.
 func NewMobileEquipmentIdentity(mei string) *IE {
+	// TS 29.274 §8.10: identity digit count.
+	if len(mei) != 15 && len(mei) != 16 {
+		return newErrorIE(MobileEquipmentIdentity, ErrInvalidLength)
+	}
 	m, err := utils.EncodeBCDDigits(mei)
 	if err != nil {
 		return newErrorIE(MobileEquipmentIdentity, err)
@@ -32,12 +36,26 @@ func (i *IE) MobileEquipmentIdentity() (string, error) {
 		return "", io.ErrUnexpectedEOF
 	}
 
-	return utils.DecodeBCDDigits(i.Payload)
+	v, err := utils.DecodeBCDDigits(i.Payload)
+	if err != nil {
+		return "", err
+	}
+	if len(v) != 15 && len(v) != 16 {
+		return "", ErrInvalidLength
+	}
+	// TS 29.274 §§8.3, 8.10: only one trailing high-nibble filler.
+	if (len(v)+1)/2 != len(i.Payload) {
+		return "", ErrMalformed
+	}
+	return v, nil
 }
 
 // MustMobileEquipmentIdentity returns MobileEquipmentIdentity in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMobileEquipmentIdentity() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.MobileEquipmentIdentity()
 	return v
 }

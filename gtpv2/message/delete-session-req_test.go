@@ -20,7 +20,7 @@ func TestDeleteSessionRequest(t *testing.T) {
 			Structured: message.NewDeleteSessionRequest(
 				testutils.TestBearerInfo.TEID, testutils.TestBearerInfo.Seq,
 				ie.NewEPSBearerID(5),
-				ie.NewUserLocationInformationStruct(
+				ie.NewUserLocationInformation(
 					nil, nil, nil, ie.NewTAI("123", "45", 0x0001),
 					ie.NewECGI("123", "45", 0x00000101), nil, nil, nil,
 				),

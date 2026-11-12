@@ -13,6 +13,10 @@ import (
 
 // NewUserCSGInformation creates a new UserCSGInformation IE.
 func NewUserCSGInformation(mcc, mnc string, csgID uint32, mode, lcsg, cmi uint8) *IE {
+	// TS 29.274 §8.75: reject fields that do not fit.
+	if mode > 1 || lcsg > 1 || cmi > 1 || csgID > 0x7ffffff {
+		return newErrorIE(UserCSGInformation, ErrMalformed)
+	}
 	v := NewUserCSGInformationFields(mcc, mnc, csgID, mode, lcsg, cmi)
 	b, err := v.Marshal()
 	if err != nil {
@@ -37,6 +41,7 @@ func (i *IE) UserCSGInformation() (*UserCSGInformationFields, error) {
 
 // UserCSGInformationFields is a set of fields in UserCSGInformation IE.
 type UserCSGInformationFields struct {
+	err        error
 	MCC, MNC   string
 	CSGID      uint32 // 27-bit
 	AccessMode uint8  // 7-8th bit, in the same octet as Flags
@@ -45,6 +50,9 @@ type UserCSGInformationFields struct {
 
 // NewUserCSGInformationFields creates a new UserCSGInformationFields.
 func NewUserCSGInformationFields(mcc, mnc string, csgID uint32, mode, lcsg, cmi uint8) *UserCSGInformationFields {
+	if mode > 1 || lcsg > 1 || cmi > 1 {
+		return &UserCSGInformationFields{err: ErrMalformed}
+	}
 	return &UserCSGInformationFields{
 		MCC:        mcc,
 		MNC:        mnc,
@@ -56,6 +64,9 @@ func NewUserCSGInformationFields(mcc, mnc string, csgID uint32, mode, lcsg, cmi 
 
 // Marshal serializes UserCSGInformationFields.
 func (f *UserCSGInformationFields) Marshal() ([]byte, error) {
+	if f == nil {
+		return nil, ErrIENotFound
+	}
 	b := make([]byte, f.MarshalLen())
 	if err := f.MarshalTo(b); err != nil {
 		return nil, err
@@ -66,6 +77,18 @@ func (f *UserCSGInformationFields) Marshal() ([]byte, error) {
 
 // MarshalTo serializes UserCSGInformationFields.
 func (f *UserCSGInformationFields) MarshalTo(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	if f.err != nil {
+		return f.err
+	}
+	if f.CSGID > 0x7ffffff || f.AccessMode > 1 || f.Flags > 3 {
+		return ErrMalformed
+	}
+	if len(b) < f.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
@@ -82,7 +105,11 @@ func (f *UserCSGInformationFields) MarshalTo(b []byte) error {
 	}
 
 	binary.BigEndian.PutUint32(b[3:7], f.CSGID&0x7ffffff)
+	// TS 29.274 §8.75: CMI is zero outside Hybrid Mode.
 	b[7] = ((f.AccessMode & 0x03) << 6) | f.Flags
+	if f.AccessMode != 1 {
+		b[7] &^= 1
+	}
 
 	return nil
 }
@@ -99,6 +126,10 @@ func ParseUserCSGInformationFields(b []byte) (*UserCSGInformationFields, error) 
 
 // UnmarshalBinary decodes given bytes into UserCSGInformationFields.
 func (f *UserCSGInformationFields) UnmarshalBinary(b []byte) error {
+	if f == nil {
+		return ErrIENotFound
+	}
+	*f = UserCSGInformationFields{}
 	l := len(b)
 	if l < 3 {
 		return io.ErrUnexpectedEOF
@@ -117,12 +148,18 @@ func (f *UserCSGInformationFields) UnmarshalBinary(b []byte) error {
 	f.CSGID = binary.BigEndian.Uint32(b[3:7]) & 0x7ffffff
 	f.AccessMode = b[7] >> 6
 	f.Flags = b[7] & 0x03
+	if f.AccessMode != 1 {
+		f.Flags &^= 1
+	}
 
 	return nil
 }
 
 // MarshalLen returns the serial length of UserCSGInformationFields in int.
 func (f *UserCSGInformationFields) MarshalLen() int {
+	if f == nil {
+		return 0
+	}
 	return 8
 }
 
@@ -145,6 +182,9 @@ func (i *IE) AccessMode() (uint8, error) {
 // MustAccessMode returns AccessMode in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustAccessMode() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.AccessMode()
 	return v
 }

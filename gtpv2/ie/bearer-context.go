@@ -4,8 +4,6 @@
 
 package ie
 
-import "io"
-
 // NewBearerContext creates a new BearerContext IE.
 func NewBearerContext(ies ...*IE) *IE {
 	return NewGroupedIE(BearerContext, ies...)
@@ -156,17 +154,17 @@ func NewBearerContextWithinContextAcknowledge(ebi, fwdFTEID *IE) *IE {
 
 // BearerContext returns the []*IE inside BearerContext IE.
 func (i *IE) BearerContext() ([]*IE, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != BearerContext {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
-	if len(i.Payload) < 1 {
-		return nil, io.ErrUnexpectedEOF
+	for _, child := range i.ChildIEs {
+		if child == nil {
+			return nil, ErrMalformed
+		}
 	}
-
-	ies, err := ParseMultiIEs(i.Payload)
-	if err != nil {
-		return nil, err
-	}
-
-	return ies, nil
+	// TS 29.274 §§6.1.2, 7.7.9: retain children, including unknown instances.
+	return i.ChildIEs, nil
 }

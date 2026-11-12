@@ -18,7 +18,7 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 	}{
 		{
 			name: "Test getting MCC and MNC from ULI from CGI",
-			i: NewUserLocationInformationStruct(
+			i: NewUserLocationInformation(
 				NewCGI("123", "45", 0x1111, 0x2222), nil, nil, nil, nil, nil, nil, nil,
 			),
 			wantMCC: "123",
@@ -26,7 +26,7 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from SAI",
-			i: NewUserLocationInformationStruct(
+			i: NewUserLocationInformation(
 				nil, NewSAI("234", "56", 0x1111, 0x3333), nil, nil, nil, nil, nil, nil,
 			),
 			wantMCC: "234",
@@ -34,15 +34,15 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from RAI",
-			i: NewUserLocationInformationStruct(
-				nil, nil, NewRAI("456", "78", 0x1111, 0x4444), nil, nil, nil, nil, nil,
+			i: NewUserLocationInformation(
+				nil, nil, NewRAI("456", "78", 0x1111, 0x44), nil, nil, nil, nil, nil,
 			),
 			wantMCC: "456",
 			wantMNC: "78",
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from TAI",
-			i: NewUserLocationInformationStruct(
+			i: NewUserLocationInformation(
 				nil, nil, nil, NewTAI("567", "89", 0x5555), nil, nil, nil, nil,
 			),
 			wantMCC: "567",
@@ -50,15 +50,15 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from ECGI",
-			i: NewUserLocationInformationStruct(
-				nil, nil, nil, nil, NewECGI("678", "90", 0x66666666), nil, nil, nil,
+			i: NewUserLocationInformation(
+				nil, nil, nil, nil, NewECGI("678", "90", 0x6666666), nil, nil, nil,
 			),
 			wantMCC: "678",
 			wantMNC: "90",
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from LAI",
-			i: NewUserLocationInformationStruct(
+			i: NewUserLocationInformation(
 				nil, nil, nil, nil, nil, NewLAI("789", "01", 0x1111), nil, nil,
 			),
 			wantMCC: "789",
@@ -66,23 +66,23 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from MENBI",
-			i: NewUserLocationInformationStruct(
-				nil, nil, nil, nil, nil, nil, NewMENBI("890", "12", 0x111111), nil,
+			i: NewUserLocationInformation(
+				nil, nil, nil, nil, nil, nil, NewMENBI("890", "12", 0x11111), nil,
 			),
 			wantMCC: "890",
 			wantMNC: "12",
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from EMENBI",
-			i: NewUserLocationInformationStruct(
-				nil, nil, nil, nil, nil, nil, nil, NewEMENBI("321", "54", 0x222222),
+			i: NewUserLocationInformation(
+				nil, nil, nil, nil, nil, nil, nil, NewEMENBI("321", "54", 0x122222),
 			),
 			wantMCC: "321",
 			wantMNC: "54",
 		},
 		{
 			name: "Test getting empty strings when uli does not contain information elemtents",
-			i: NewUserLocationInformationStruct(
+			i: NewUserLocationInformation(
 				nil, nil, nil, nil, nil, nil, nil, nil,
 			),
 			wantMCC: "",
@@ -91,15 +91,15 @@ func TestMCCAndMNCFromULI(t *testing.T) {
 		},
 		{
 			name: "Test getting MCC and MNC from ULI from CGI when all elements are given",
-			i: NewUserLocationInformationStruct(
+			i: NewUserLocationInformation(
 				NewCGI("123", "45", 0x1111, 0x2222),
 				NewSAI("234", "56", 0x1111, 0x3333),
-				NewRAI("456", "78", 0x1111, 0x4444),
+				NewRAI("456", "78", 0x1111, 0x44),
 				NewTAI("567", "89", 0x5555),
-				NewECGI("678", "90", 0x66666666),
+				NewECGI("678", "90", 0x6666666),
 				NewLAI("789", "01", 0x1111),
-				NewMENBI("890", "12", 0x111111),
-				NewEMENBI("321", "54", 0x222222),
+				NewMENBI("890", "12", 0x11111),
+				nil,
 			),
 			wantMCC: "123",
 			wantMNC: "45",

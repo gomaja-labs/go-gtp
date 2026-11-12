@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gomaja-labs/go-gtp/gtpv2/ie"
 	"github.com/gomaja-labs/go-gtp/gtpv2/message"
 )
 
@@ -28,19 +29,21 @@ type Subscriber struct {
 
 // Session is a GTPv2 Session.
 type Session struct {
-	mu       sync.Mutex
-	isActive bool
+	AdditionalIEs []*ie.IE
+	mu            sync.Mutex
+	isActive      bool
 	*teidMap
 	*bearerMap
 
-	// channel to store message passed by other Sessions
-	msgQueue chan message.Message
+	// Messages awaiting their sequence-specific waiter.
+	pending   []pendingMessage
+	abandoned map[uint32]time.Time
+	// abandonedOrder lists abandoned sequences oldest first, for expiry.
+	abandonedOrder []abandonedSequence
+	changed        chan struct{}
 
-	// peerAddr is a net.Addr of the peer associated with Session.
-	// To avoid calling String() many times, peerAddrString is set when NewSession
-	// and UpdatePeerAddr is called.
-	peerAddr       net.Addr
-	peerAddrString string
+	// peerAddr is protected by mu; getters return an address snapshot.
+	peerAddr net.Addr
 
 	// Subscriber is a Subscriber associated with Session.
 	*Subscriber
@@ -51,14 +54,21 @@ type Session struct {
 // This is expected to be used by server-like nodes. Otherwise, use CreateSession(),
 // which sends Create Session Request and returns a new Session.
 func NewSession(peerAddr net.Addr, sub *Subscriber) *Session {
+	if sub == nil {
+		sub = &Subscriber{}
+	}
+	if sub.Location == nil {
+		sub.Location = &Location{}
+	}
 	s := &Session{
-		mu:             sync.Mutex{},
-		peerAddr:       peerAddr,
-		peerAddrString: peerAddr.String(),
-		teidMap:        newTeidMap(),
-		bearerMap:      newBearerMap("default", &Bearer{QoSProfile: &QoSProfile{}}),
-		Subscriber:     sub,
-		msgQueue:       make(chan message.Message, 1000),
+		mu:       sync.Mutex{},
+		peerAddr: copyAddr(peerAddr),
+
+		teidMap:    newTeidMap(),
+		bearerMap:  newBearerMap("default", NewBearer(0, "", &QoSProfile{})),
+		Subscriber: sub,
+		changed:    make(chan struct{}),
+		abandoned:  make(map[uint32]time.Time),
 	}
 
 	return s
@@ -66,6 +76,9 @@ func NewSession(peerAddr net.Addr, sub *Subscriber) *Session {
 
 // Activate marks a Session active.
 func (s *Session) Activate() error {
+	if s == nil {
+		return &InvalidSessionError{}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -79,6 +92,9 @@ func (s *Session) Activate() error {
 
 // Deactivate marks a Session inactive.
 func (s *Session) Deactivate() error {
+	if s == nil {
+		return &InvalidSessionError{}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -88,6 +104,9 @@ func (s *Session) Deactivate() error {
 
 // IsActive reports whether a Session is active or not.
 func (s *Session) IsActive() bool {
+	if s == nil {
+		return false
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -96,13 +115,22 @@ func (s *Session) IsActive() bool {
 
 // PeerAddr returns the address of the peer node associated with Session.
 func (s *Session) PeerAddr() net.Addr {
-	return s.peerAddr
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return copyAddr(s.peerAddr)
 }
 
 // UpdatePeerAddr updates the address of the peer node associated with Session.
 func (s *Session) UpdatePeerAddr(peer net.Addr) {
-	s.peerAddr = peer
-	s.peerAddrString = peer.String()
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peerAddr = copyAddr(peer)
 }
 
 // AddTEID adds TEID to session with InterfaceType.
@@ -113,50 +141,142 @@ func (s *Session) UpdatePeerAddr(peer net.Addr) {
 // For incoming TEID of local interface type, (*Conn).RegisterSession does that
 // instead of users but it is safe to call it.
 func (s *Session) AddTEID(ifType uint8, teid uint32) {
+	if s == nil {
+		return
+	}
 	s.teidMap.store(ifType, teid)
 }
 
 // GetTEID returns TEID associated with InterfaceType given.
 func (s *Session) GetTEID(ifType uint8) (uint32, error) {
+	if s == nil {
+		return 0, ErrTEIDNotFound
+	}
 	if teid, ok := s.teidMap.load(ifType); ok {
 		return teid, nil
 	}
 	return 0, ErrTEIDNotFound
 }
 
-// PassMessageTo passes the message (typically "triggerred message") to the session
-// expecting to receive it.
-//
-// If the message queue of s is full, it waits for certain period of time specified
-// by timeout. It discards the msg and returns error if expired.
-// The default queue size of a Session is 1000 and it cannot be configured in the
-// current implementation.
-func PassMessageTo(s *Session, msg message.Message, timeout time.Duration) error {
-	select {
-	case s.msgQueue <- msg:
-		return nil
-	case <-time.After(timeout):
-		return ErrTimeout
+// pendingMessage is a message passed to a Session and not yet claimed by
+// WaitMessage.
+type pendingMessage struct {
+	msg     message.Message
+	arrived time.Time
+}
+
+// abandonedSequence records when the WaitMessage for seq timed out.
+type abandonedSequence struct {
+	seq uint32
+	at  time.Time
+}
+
+const maxPendingMessages = 1000
+
+// pendingMessageTTL bounds how long a Session keeps a message nobody waits for,
+// and how long a sequence whose WaitMessage timed out keeps dropping its late
+// reply. It covers a reply that arrives just before WaitMessage is called.
+var pendingMessageTTL = 30 * time.Second
+
+// PassMessageTo hands msg to the WaitMessage call waiting for its sequence
+// number. It never blocks: a reply whose waiter already timed out is dropped,
+// messages nobody claims expire after a while, and when a Session holds
+// maxPendingMessages unclaimed messages the oldest one is discarded.
+func PassMessageTo(s *Session, msg message.Message) error {
+	if s == nil {
+		return &InvalidSessionError{}
+	}
+	if msg == nil || msg.GetHeader() == nil {
+		return message.ErrNilMessage
+	}
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(now)
+	if _, ok := s.abandoned[msg.Sequence()]; ok {
+		return nil // late reply for a waiter that timed out
+	}
+	if len(s.pending) == maxPendingMessages {
+		s.pending[0] = pendingMessage{}
+		s.pending = s.pending[1:]
+	}
+	s.pending = append(s.pending, pendingMessage{msg: msg, arrived: now})
+	close(s.changed)
+	s.changed = make(chan struct{})
+	return nil
+}
+
+// pruneLocked drops expired unclaimed messages and abandoned sequences. Both
+// lists are ordered by time, so only expired entries are visited.
+// s.mu must be held.
+func (s *Session) pruneLocked(now time.Time) {
+	for len(s.pending) > 0 && now.Sub(s.pending[0].arrived) >= pendingMessageTTL {
+		s.pending[0] = pendingMessage{}
+		s.pending = s.pending[1:]
+	}
+	for len(s.abandoned) > 0 && len(s.abandonedOrder) > 0 && now.Sub(s.abandonedOrder[0].at) >= pendingMessageTTL {
+		a := s.abandonedOrder[0]
+		if at, ok := s.abandoned[a.seq]; ok && at.Equal(a.at) {
+			delete(s.abandoned, a.seq)
+		}
+		s.abandonedOrder = s.abandonedOrder[1:]
+	}
+	if len(s.abandoned) == 0 {
+		s.abandonedOrder = nil
 	}
 }
 
-// WaitMessage waits for a message to come from other Session.
-//
-// It waits for certain period of time specified by timeout, and returns the message
-// if seq matches the SequenceNumber of message. Otherwise it returns error immediately.
-func (s *Session) WaitMessage(seq uint32, timeout time.Duration) (message.Message, error) {
-	select {
-	case msg, ok := <-s.msgQueue:
-		if !ok {
-			return nil, &InvalidSessionError{s.IMSI}
+// takeLocked removes and returns the pending message with sequence seq.
+// s.mu must be held.
+func (s *Session) takeLocked(seq uint32) (message.Message, bool) {
+	for i, p := range s.pending {
+		if p.msg.Sequence() != seq {
+			continue
 		}
+		copy(s.pending[i:], s.pending[i+1:])
+		s.pending[len(s.pending)-1] = pendingMessage{}
+		s.pending = s.pending[:len(s.pending)-1]
+		return p.msg, true
+	}
+	return nil, false
+}
 
-		if seqGot := msg.Sequence(); seqGot != seq {
-			return nil, &InvalidSequenceError{seqGot}
+// WaitMessage waits for the message with sequence number seq, leaving messages
+// of other transactions queued (TS 29.274 §7.6 permits several outstanding
+// messages on one session). After a timeout, a late reply for seq is dropped
+// when it arrives instead of occupying the queue.
+func (s *Session) WaitMessage(seq uint32, timeout time.Duration) (message.Message, error) {
+	if s == nil {
+		return nil, &InvalidSessionError{}
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	s.mu.Lock()
+	delete(s.abandoned, seq) // a new waiter for a reused sequence
+	s.mu.Unlock()
+	for {
+		s.mu.Lock()
+		if msg, ok := s.takeLocked(seq); ok {
+			s.mu.Unlock()
+			return msg, nil
 		}
-		return msg, nil
-	case <-time.After(timeout):
-		return nil, ErrTimeout
+		changed := s.changed
+		s.mu.Unlock()
+		select {
+		case <-changed:
+		case <-timer.C:
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if msg, ok := s.takeLocked(seq); ok {
+				return msg, nil
+			}
+			// Only this Session's own timed-out waits are recorded here, never
+			// remote input, and pruneLocked expires them after pendingMessageTTL.
+			now := time.Now()
+			s.abandoned[seq] = now
+			s.abandonedOrder = append(s.abandonedOrder, abandonedSequence{seq: seq, at: now})
+			return nil, ErrTimeout
+		}
 	}
 }
 
@@ -165,16 +285,25 @@ func (s *Session) WaitMessage(seq uint32, timeout time.Duration) (message.Messag
 // In the single-bearer environment it is not used, as a bearer named "default" is
 // always available after created a Session.
 func (s *Session) AddBearer(name string, br *Bearer) {
+	if s == nil {
+		return
+	}
 	s.bearerMap.store(name, br)
 }
 
 // RemoveBearer removes a Bearer looked up by name.
 func (s *Session) RemoveBearer(name string) {
+	if s == nil {
+		return
+	}
 	s.bearerMap.delete(name)
 }
 
 // RemoveBearerByEBI removes a Bearer looked up by name.
 func (s *Session) RemoveBearerByEBI(ebi uint8) {
+	if s == nil {
+		return
+	}
 	name, err := s.LookupBearerNameByEBI(ebi)
 	if err != nil {
 		return
@@ -184,6 +313,9 @@ func (s *Session) RemoveBearerByEBI(ebi uint8) {
 
 // GetDefaultBearer returns the default bearer.
 func (s *Session) GetDefaultBearer() *Bearer {
+	if s == nil {
+		return nil
+	}
 	// it is not expected that the default bearer cannot be found.
 	bearer, ok := s.bearerMap.load("default")
 	if !ok {
@@ -195,12 +327,18 @@ func (s *Session) GetDefaultBearer() *Bearer {
 
 // SetDefaultBearer sets given bearer as the default bearer.
 func (s *Session) SetDefaultBearer(bearer *Bearer) {
+	if s == nil {
+		return
+	}
 	// it is not expected that the default bearer cannot be found.
 	s.bearerMap.store("default", bearer)
 }
 
 // LookupBearerByName looks up Bearer registered in Session by name.
 func (s *Session) LookupBearerByName(name string) (*Bearer, error) {
+	if s == nil {
+		return nil, &BearerNotFoundError{}
+	}
 	if br, ok := s.bearerMap.load(name); ok {
 		return br, nil
 	}
@@ -210,6 +348,9 @@ func (s *Session) LookupBearerByName(name string) (*Bearer, error) {
 
 // LookupBearerByEBI looks up Bearer registered in Session by EBI.
 func (s *Session) LookupBearerByEBI(ebi uint8) (*Bearer, error) {
+	if s == nil {
+		return nil, &BearerNotFoundError{}
+	}
 	var bearer *Bearer
 	s.bearerMap.rangeWithFunc(func(name, br interface{}) bool {
 		b := br.(*Bearer)
@@ -230,17 +371,22 @@ func (s *Session) LookupBearerByEBI(ebi uint8) (*Bearer, error) {
 // LookupBearerNameByEBI looks up name of Bearer by EBI and returns
 // its name.
 func (s *Session) LookupBearerNameByEBI(ebi uint8) (string, error) {
+	if s == nil {
+		return "", &BearerNotFoundError{}
+	}
 	var name string
+	found := false
 	s.bearerMap.rangeWithFunc(func(n, br interface{}) bool {
 		bearer := br.(*Bearer)
 		if ebi == bearer.EBI {
 			name = n.(string)
+			found = true
 			return false
 		}
 		return true
 	})
 
-	if name == "" {
+	if !found {
 		return "", &BearerNotFoundError{IMSI: s.IMSI}
 
 	}
@@ -251,6 +397,9 @@ func (s *Session) LookupBearerNameByEBI(ebi uint8) (string, error) {
 //
 // If no EBI found, it returns 0(=invalid value for EBI).
 func (s *Session) LookupEBIByName(name string) uint8 {
+	if s == nil {
+		return 0
+	}
 	if br, ok := s.bearerMap.load(name); ok {
 		return br.EBI
 	}
@@ -262,10 +411,13 @@ func (s *Session) LookupEBIByName(name string) uint8 {
 //
 // If no EBI found, it returns 0(=invalid value for EBI).
 func (s *Session) LookupEBIByTEID(teid uint32) uint8 {
+	if s == nil {
+		return 0
+	}
 	var ebi uint8
 	s.bearerMap.rangeWithFunc(func(name, bearer interface{}) bool {
 		br := bearer.(*Bearer)
-		if teid == br.teidIn || teid == br.teidOut {
+		if teid == br.IncomingTEID() || teid == br.OutgoingTEID() {
 			ebi = br.EBI
 			return false
 		}
@@ -307,7 +459,9 @@ func newBearerMap(name string, bearer *Bearer) *bearerMap {
 	return b
 }
 func (b *bearerMap) store(name string, bearer *Bearer) {
-	b.syncMap.Store(name, bearer)
+	if bearer != nil {
+		b.syncMap.Store(name, bearer)
+	}
 }
 
 func (b *bearerMap) load(name string) (*Bearer, bool) {
@@ -329,6 +483,9 @@ func (b *bearerMap) rangeWithFunc(fn func(name, bearer interface{}) bool) {
 
 // Bearers returns all the bearers registered in Session.
 func (s *Session) Bearers() []*Bearer {
+	if s == nil {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -343,6 +500,9 @@ func (s *Session) Bearers() []*Bearer {
 
 // BearerCount returns the number of bearers registered in Session.
 func (s *Session) BearerCount() int {
+	if s == nil {
+		return 0
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -43,6 +43,9 @@ func (i *IE) PLMNID() (string, error) {
 // MustPLMNID returns PLMNID in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustPLMNID() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.PLMNID()
 	return v
 }

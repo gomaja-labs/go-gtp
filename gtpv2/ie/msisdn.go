@@ -12,6 +12,9 @@ import (
 
 // NewMSISDN creates a new MSISDN IE.
 func NewMSISDN(msisdn string) *IE {
+	if len(msisdn) == 0 {
+		return newErrorIE(MSISDN, ErrInvalidLength)
+	}
 	m, err := utils.EncodeBCDDigits(msisdn)
 	if err != nil {
 		return newErrorIE(MSISDN, err)
@@ -31,12 +34,23 @@ func (i *IE) MSISDN() (string, error) {
 		return "", io.ErrUnexpectedEOF
 	}
 
-	return utils.DecodeBCDDigits(i.Payload)
+	v, err := utils.DecodeBCDDigits(i.Payload)
+	if err != nil {
+		return "", err
+	}
+	// TS 29.274 §8.11: only a single final high nibble may be filler.
+	if len(v) == 0 || (len(v)+1)/2 != len(i.Payload) {
+		return "", ErrMalformed
+	}
+	return v, nil
 }
 
 // MustMSISDN returns MSISDN in string, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustMSISDN() string {
+	if i == nil {
+		return ""
+	}
 	v, _ := i.MSISDN()
 	return v
 }

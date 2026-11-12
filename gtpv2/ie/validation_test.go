@@ -100,7 +100,8 @@ func TestIdentityFillerValidation(t *testing.T) {
 	if _, err := i.IMSI(); !errors.Is(err, utils.ErrMalformed) {
 		t.Fatal(err)
 	}
-	i.Payload = []byte{0x21, 0x43, 0x65, 0x87, 0x09, 0x21, 0x43, 0xff}
+	// TS 29.274 §8.3: an even-digit IMSI has no filler octet.
+	i.Payload = []byte{0x21, 0x43, 0x65, 0x87, 0x09, 0x21, 0x43}
 	if got, err := i.IMSI(); err != nil || got != "12345678901234" {
 		t.Fatalf("even identity: %q %v", got, err)
 	}

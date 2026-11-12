@@ -19,6 +19,9 @@ func NewPrivateExtension(id uint16, value []byte) *IE {
 
 // EnterpriseID returns EnterpriseID in uint16 if the type of IE matches.
 func (i *IE) EnterpriseID() (uint16, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != PrivateExtension {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -33,16 +36,22 @@ func (i *IE) EnterpriseID() (uint16, error) {
 // MustEnterpriseID returns EnterpriseID in uint16, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustEnterpriseID() uint16 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.EnterpriseID()
 	return v
 }
 
 // PrivateExtension returns PrivateExtension value in []byte if the type of IE matches.
 func (i *IE) PrivateExtension() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != PrivateExtension {
 		return nil, &InvalidTypeError{Type: i.Type}
 	}
-	if len(i.Payload) < 3 {
+	if len(i.Payload) < 2 {
 		return nil, io.ErrUnexpectedEOF
 	}
 

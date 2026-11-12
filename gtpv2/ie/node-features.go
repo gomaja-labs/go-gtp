@@ -11,6 +11,9 @@ func NewNodeFeatures(flags uint8) *IE {
 
 // NodeFeatures returns NodeFeatures in uint8 if the type of IE matches.
 func (i *IE) NodeFeatures() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != NodeFeatures {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -19,12 +22,18 @@ func (i *IE) NodeFeatures() (uint8, error) {
 
 // MustNodeFeatures returns NodeFeatures in uint8 if the type of IE matches.
 func (i *IE) MustNodeFeatures() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.NodeFeatures()
 	return v
 }
 
 // HasPRN reports whether an IE has PRN bit.
 func (i *IE) HasPRN() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.NodeFeatures()
 	if err != nil {
 		return false
@@ -35,6 +44,9 @@ func (i *IE) HasPRN() bool {
 
 // HasMABR reports whether an IE has MABR bit.
 func (i *IE) HasMABR() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.NodeFeatures()
 	if err != nil {
 		return false
@@ -45,6 +57,9 @@ func (i *IE) HasMABR() bool {
 
 // HasNTSR reports whether an IE has NTSR bit.
 func (i *IE) HasNTSR() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.NodeFeatures()
 	if err != nil {
 		return false
@@ -55,6 +70,9 @@ func (i *IE) HasNTSR() bool {
 
 // HasCIOT reports whether an IE has CIOT bit.
 func (i *IE) HasCIOT() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.NodeFeatures()
 	if err != nil {
 		return false
@@ -65,6 +83,9 @@ func (i *IE) HasCIOT() bool {
 
 // HasS1UN reports whether an IE has S1UN bit.
 func (i *IE) HasS1UN() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.NodeFeatures()
 	if err != nil {
 		return false
@@ -75,6 +96,9 @@ func (i *IE) HasS1UN() bool {
 
 // HasETH reports whether an IE has ETH bit.
 func (i *IE) HasETH() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.NodeFeatures()
 	if err != nil {
 		return false
@@ -85,6 +109,9 @@ func (i *IE) HasETH() bool {
 
 // HasMTEDT reports whether an IE has MTEDT bit.
 func (i *IE) HasMTEDT() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.NodeFeatures()
 	if err != nil {
 		return false

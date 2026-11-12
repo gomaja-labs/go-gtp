@@ -23,8 +23,15 @@ func NewIndication(
 	roaai, epcosi, cpopci, pmtmsi, s11tf, pnsi, unaccsi, wpmsi,
 	fgsnn26, reprefi, fgsiwk, eevrsi, ltemui, ltempi, enbcrsi, tspcmi,
 	csrmfi, mtedtn, mtedta, n5gnmi, fgcnrs, fgcnri, fsrhoi, ethpdn,
-	sp98, sp97, sp96, sp95, sp94, sp93, sp92, emci uint8,
+	nspusi, pgwrnsi, rppcsi, pgwchi, sissme, nsenbi, idfupf, emci uint8,
+	extensionOctets ...uint8,
 ) *IE {
+	for _, bit := range []uint8{daf, dtf, hi, dfi, oi, isrsi, israi, sgwci, sqci, uimsi, cfsi, crsi, ps, pt, si, msv, retLoc, pbic, srni, s6af, s4af, mbmdt, israu, ccrsi, cprai, arrl, ppoff, ppon, ppsi, csfbi, clii, cpsr, nsi, uasi, dtci, bdwi, psci, pcri, aosi, aopi, roaai, epcosi, cpopci, pmtmsi, s11tf, pnsi, unaccsi, wpmsi, fgsnn26, reprefi, fgsiwk, eevrsi, ltemui, ltempi, enbcrsi, tspcmi, csrmfi, mtedtn, mtedta, n5gnmi, fgcnrs, fgcnri, fsrhoi, ethpdn, nspusi, pgwrnsi, rppcsi, pgwchi, sissme, nsenbi, idfupf, emci} {
+		if bit > 1 {
+			return newErrorIE(Indication, ErrMalformed)
+		}
+	}
+
 	i := New(Indication, 0x00, make([]byte, 9))
 	i.Payload[0] |= sgwci
 	i.Payload[0] |= (israi << 1)
@@ -99,13 +106,18 @@ func NewIndication(
 	i.Payload[7] |= (csrmfi << 7)
 
 	i.Payload[8] |= emci
-	i.Payload[8] |= (sp92 << 1)
-	i.Payload[8] |= (sp93 << 2)
-	i.Payload[8] |= (sp94 << 3)
-	i.Payload[8] |= (sp95 << 4)
-	i.Payload[8] |= (sp96 << 5)
-	i.Payload[8] |= (sp97 << 6)
-	i.Payload[8] |= (sp98 << 7)
+	i.Payload[8] |= (idfupf << 1)
+	i.Payload[8] |= (nsenbi << 2)
+	i.Payload[8] |= (sissme << 3)
+	i.Payload[8] |= (pgwchi << 4)
+	i.Payload[8] |= (rppcsi << 5)
+	i.Payload[8] |= (pgwrnsi << 6)
+	i.Payload[8] |= (nspusi << 7)
+	i.Payload = append(i.Payload, extensionOctets...)
+	if len(i.Payload) >= 10 {
+		i.Payload[9] &= 0x7f
+	} // TS 29.274 §8.12: spare bit.
+	i.SetLength()
 	return i
 }
 
@@ -113,18 +125,18 @@ func NewIndication(
 // sequence of bits. The sequence should look the same as Wireshark appearance.
 // The input is to be like "101000010000100000010101000100001000100010000001010000001010000000000001".
 func NewIndicationFromBitSequence(bitSequence string) *IE {
-	if len(bitSequence) != 72 {
-		return nil
+	if len(bitSequence) < 16 || len(bitSequence)%8 != 0 {
+		return newErrorIE(Indication, ErrInvalidLength)
 	}
 
-	ie := New(Indication, 0x00, make([]byte, 9))
+	ie := New(Indication, 0x00, make([]byte, len(bitSequence)/8))
 	for i, r := range bitSequence {
 		bit, err := strconv.Atoi(string(r))
 		if err != nil {
-			return nil
+			return newErrorIE(Indication, err)
 		}
 		if bit > 1 {
-			bit = 1
+			return newErrorIE(Indication, ErrMalformed)
 		}
 
 		// index:
@@ -136,33 +148,45 @@ func NewIndicationFromBitSequence(bitSequence string) *IE {
 		ie.Payload[i/8] |= uint8(bit << uint8(8*(i/8+1)-i-1))
 	}
 
+	if len(ie.Payload) >= 10 {
+		ie.Payload[9] &= 0x7f
+	}
 	return ie
 }
 
 // NewIndicationFromOctets creates a new IndicationFromOctets IE from the set of octets.
 func NewIndicationFromOctets(octs ...uint8) *IE {
-	ie := New(Indication, 0x00, make([]byte, 0))
-	for i, o := range octs {
-		if i >= 9 {
-			break
-		}
-		ie.Payload = append(ie.Payload, o)
+	// TS 29.274 §8.12: octets 5 and 6 are mandatory; later flags extend the IE.
+	if len(octs) < 2 {
+		return newErrorIE(Indication, ErrInvalidLength)
 	}
-	ie.SetLength()
-	return ie
+	payload := append([]byte(nil), octs...)
+	if len(payload) >= 10 {
+		payload[9] &= 0x7f
+	}
+	return New(Indication, 0, payload)
 }
 
 // Indication returns Indication flags in []byte if the type of IE matches.
 func (i *IE) Indication() ([]byte, error) {
+	if err := i.Err(); err != nil {
+		return nil, err
+	}
 	if i.Type != Indication {
 		return nil, &InvalidTypeError{i.Type}
 	}
 
+	if len(i.Payload) < 2 {
+		return nil, ErrInvalidLength
+	}
 	return i.Payload, nil
 }
 
 // HasSGWCI reports whether an IE has SGWCI bit.
 func (i *IE) HasSGWCI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -176,6 +200,9 @@ func (i *IE) HasSGWCI() bool {
 
 // HasISRAI reports whether an IE has ISRAI bit.
 func (i *IE) HasISRAI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -189,6 +216,9 @@ func (i *IE) HasISRAI() bool {
 
 // HasISRSI reports whether an IE has ISRSI bit.
 func (i *IE) HasISRSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -202,6 +232,9 @@ func (i *IE) HasISRSI() bool {
 
 // HasOI reports whether an IE has OI bit.
 func (i *IE) HasOI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -215,6 +248,9 @@ func (i *IE) HasOI() bool {
 
 // HasDFI reports whether an IE has DFI bit.
 func (i *IE) HasDFI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -228,6 +264,9 @@ func (i *IE) HasDFI() bool {
 
 // HasHI reports whether an IE has HI bit.
 func (i *IE) HasHI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -241,6 +280,9 @@ func (i *IE) HasHI() bool {
 
 // HasDTF reports whether an IE has DTF bit.
 func (i *IE) HasDTF() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -254,6 +296,9 @@ func (i *IE) HasDTF() bool {
 
 // HasDAF reports whether an IE has DAF bit.
 func (i *IE) HasDAF() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -267,6 +312,9 @@ func (i *IE) HasDAF() bool {
 
 // HasMSV reports whether an IE has MSV bit.
 func (i *IE) HasMSV() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -280,6 +328,9 @@ func (i *IE) HasMSV() bool {
 
 // HasSI reports whether an IE has SI bit.
 func (i *IE) HasSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -293,6 +344,9 @@ func (i *IE) HasSI() bool {
 
 // HasPT reports whether an IE has PT bit.
 func (i *IE) HasPT() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -306,6 +360,9 @@ func (i *IE) HasPT() bool {
 
 // HasPS reports whether an IE has PS bit.
 func (i *IE) HasPS() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -319,6 +376,9 @@ func (i *IE) HasPS() bool {
 
 // HasCRSI reports whether an IE has CRSI bit.
 func (i *IE) HasCRSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -332,6 +392,9 @@ func (i *IE) HasCRSI() bool {
 
 // HasCFSI reports whether an IE has CFSI bit.
 func (i *IE) HasCFSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -345,6 +408,9 @@ func (i *IE) HasCFSI() bool {
 
 // HasUIMSI reports whether an IE has UIMSI bit.
 func (i *IE) HasUIMSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -358,6 +424,9 @@ func (i *IE) HasUIMSI() bool {
 
 // HasSQCI reports whether an IE has SQCI bit.
 func (i *IE) HasSQCI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -371,6 +440,9 @@ func (i *IE) HasSQCI() bool {
 
 // HasCCRSI reports whether an IE has CCRSI bit.
 func (i *IE) HasCCRSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -384,6 +456,9 @@ func (i *IE) HasCCRSI() bool {
 
 // HasISRAU reports whether an IE has ISRAU bit.
 func (i *IE) HasISRAU() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -397,6 +472,9 @@ func (i *IE) HasISRAU() bool {
 
 // HasMBMDT reports whether an IE has MBMDT bit.
 func (i *IE) HasMBMDT() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -410,6 +488,9 @@ func (i *IE) HasMBMDT() bool {
 
 // HasS4AF reports whether an IE has S4AF bit.
 func (i *IE) HasS4AF() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -423,6 +504,9 @@ func (i *IE) HasS4AF() bool {
 
 // HasS6AF reports whether an IE has S6AF bit.
 func (i *IE) HasS6AF() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -436,6 +520,9 @@ func (i *IE) HasS6AF() bool {
 
 // HasSRNI reports whether an IE has SRNI bit.
 func (i *IE) HasSRNI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -449,6 +536,9 @@ func (i *IE) HasSRNI() bool {
 
 // HasPBIC reports whether an IE has PBIC bit.
 func (i *IE) HasPBIC() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -462,6 +552,9 @@ func (i *IE) HasPBIC() bool {
 
 // HasRETLOC reports whether an IE has RETLOC bit.
 func (i *IE) HasRETLOC() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -475,6 +568,9 @@ func (i *IE) HasRETLOC() bool {
 
 // HasCPSR reports whether an IE has CPSR bit.
 func (i *IE) HasCPSR() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -488,6 +584,9 @@ func (i *IE) HasCPSR() bool {
 
 // HasCLII reports whether an IE has CLII bit.
 func (i *IE) HasCLII() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -501,6 +600,9 @@ func (i *IE) HasCLII() bool {
 
 // HasCSFBI reports whether an IE has CSFBI bit.
 func (i *IE) HasCSFBI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -514,6 +616,9 @@ func (i *IE) HasCSFBI() bool {
 
 // HasPPSI reports whether an IE has PPSI bit.
 func (i *IE) HasPPSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -527,6 +632,9 @@ func (i *IE) HasPPSI() bool {
 
 // HasPPON reports whether an IE has PPON bit.
 func (i *IE) HasPPON() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -540,6 +648,9 @@ func (i *IE) HasPPON() bool {
 
 // HasPPOF reports whether an IE has PPOF bit.
 func (i *IE) HasPPOF() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -553,6 +664,9 @@ func (i *IE) HasPPOF() bool {
 
 // HasARRL reports whether an IE has ARRL bit.
 func (i *IE) HasARRL() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -566,6 +680,9 @@ func (i *IE) HasARRL() bool {
 
 // HasCPRAI reports whether an IE has CPRAI bit.
 func (i *IE) HasCPRAI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -579,6 +696,9 @@ func (i *IE) HasCPRAI() bool {
 
 // HasAOPI reports whether an IE has AOPI bit.
 func (i *IE) HasAOPI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -592,6 +712,9 @@ func (i *IE) HasAOPI() bool {
 
 // HasAOSI reports whether an IE has AOSI bit.
 func (i *IE) HasAOSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -605,6 +728,9 @@ func (i *IE) HasAOSI() bool {
 
 // HasPCRI reports whether an IE has PCRI bit.
 func (i *IE) HasPCRI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -618,6 +744,9 @@ func (i *IE) HasPCRI() bool {
 
 // HasPSCI reports whether an IE has PSCI bit.
 func (i *IE) HasPSCI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -631,6 +760,9 @@ func (i *IE) HasPSCI() bool {
 
 // HasBDWI reports whether an IE has BDWI bit.
 func (i *IE) HasBDWI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -644,6 +776,9 @@ func (i *IE) HasBDWI() bool {
 
 // HasDTCI reports whether an IE has DTCI bit.
 func (i *IE) HasDTCI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -657,6 +792,9 @@ func (i *IE) HasDTCI() bool {
 
 // HasUASI reports whether an IE has UASI bit.
 func (i *IE) HasUASI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -670,6 +808,9 @@ func (i *IE) HasUASI() bool {
 
 // HasNSI reports whether an IE has NSI bit.
 func (i *IE) HasNSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -683,6 +824,9 @@ func (i *IE) HasNSI() bool {
 
 // HasWPMSI reports whether an IE has WPMSI bit.
 func (i *IE) HasWPMSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -696,6 +840,9 @@ func (i *IE) HasWPMSI() bool {
 
 // HasUNACCSI reports whether an IE has UNACCSI bit.
 func (i *IE) HasUNACCSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -709,6 +856,9 @@ func (i *IE) HasUNACCSI() bool {
 
 // HasPNSI reports whether an IE has PNSI bit.
 func (i *IE) HasPNSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -722,6 +872,9 @@ func (i *IE) HasPNSI() bool {
 
 // HasS11TF reports whether an IE has S11TF bit.
 func (i *IE) HasS11TF() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -735,6 +888,9 @@ func (i *IE) HasS11TF() bool {
 
 // HasPMTMSI reports whether an IE has PMTMSI bit.
 func (i *IE) HasPMTMSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -748,6 +904,9 @@ func (i *IE) HasPMTMSI() bool {
 
 // HasCPOPCI reports whether an IE has CPOPCI bit.
 func (i *IE) HasCPOPCI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -761,6 +920,9 @@ func (i *IE) HasCPOPCI() bool {
 
 // HasEPCOSI reports whether an IE has EPCOSI bit.
 func (i *IE) HasEPCOSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -774,6 +936,9 @@ func (i *IE) HasEPCOSI() bool {
 
 // HasROAAI reports whether an IE has ROAAI bit.
 func (i *IE) HasROAAI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -787,6 +952,9 @@ func (i *IE) HasROAAI() bool {
 
 // HasTSPCMI reports whether an IE has TSPCMI bit.
 func (i *IE) HasTSPCMI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -800,6 +968,9 @@ func (i *IE) HasTSPCMI() bool {
 
 // HasENBCRSI reports whether an IE has ENBCRSI bit.
 func (i *IE) HasENBCRSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -813,6 +984,9 @@ func (i *IE) HasENBCRSI() bool {
 
 // HasLTEMPI reports whether an IE has LTEMPI bit.
 func (i *IE) HasLTEMPI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -826,6 +1000,9 @@ func (i *IE) HasLTEMPI() bool {
 
 // HasLTEMUI reports whether an IE has LTEMUI bit.
 func (i *IE) HasLTEMUI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -839,6 +1016,9 @@ func (i *IE) HasLTEMUI() bool {
 
 // HasEEVRSI reports whether an IE has EEVRSI bit.
 func (i *IE) HasEEVRSI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -852,6 +1032,9 @@ func (i *IE) HasEEVRSI() bool {
 
 // Has5GSIWK reports whether an IE has 5GSIWK bit.
 func (i *IE) Has5GSIWK() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -865,6 +1048,9 @@ func (i *IE) Has5GSIWK() bool {
 
 // HasREPREFI reports whether an IE has REPREFI bit.
 func (i *IE) HasREPREFI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -878,6 +1064,9 @@ func (i *IE) HasREPREFI() bool {
 
 // Has5GSNN26 reports whether an IE has 5GSNN26 bit.
 func (i *IE) Has5GSNN26() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -891,6 +1080,9 @@ func (i *IE) Has5GSNN26() bool {
 
 // HasETHPDN reports whether an IE has ETHPDN bit.
 func (i *IE) HasETHPDN() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -904,6 +1096,9 @@ func (i *IE) HasETHPDN() bool {
 
 // Has5SRHOI reports whether an IE has 5SRHOI bit.
 func (i *IE) Has5SRHOI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -917,6 +1112,9 @@ func (i *IE) Has5SRHOI() bool {
 
 // Has5GCNRI reports whether an IE has 5GCNRI bit.
 func (i *IE) Has5GCNRI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -930,6 +1128,9 @@ func (i *IE) Has5GCNRI() bool {
 
 // Has5GCNRS reports whether an IE has 5GCNRS bit.
 func (i *IE) Has5GCNRS() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -943,6 +1144,9 @@ func (i *IE) Has5GCNRS() bool {
 
 // HasN5GNMI reports whether an IE has N5GNMI bit.
 func (i *IE) HasN5GNMI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -956,6 +1160,9 @@ func (i *IE) HasN5GNMI() bool {
 
 // HasMTEDTA reports whether an IE has MTEDTA bit.
 func (i *IE) HasMTEDTA() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -969,6 +1176,9 @@ func (i *IE) HasMTEDTA() bool {
 
 // HasMTEDTN reports whether an IE has MTEDTN bit.
 func (i *IE) HasMTEDTN() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -982,6 +1192,9 @@ func (i *IE) HasMTEDTN() bool {
 
 // HasCSRMFI reports whether an IE has CSRMFI bit.
 func (i *IE) HasCSRMFI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false
@@ -995,6 +1208,9 @@ func (i *IE) HasCSRMFI() bool {
 
 // HasEMCI reports whether an IE has EMCI bit.
 func (i *IE) HasEMCI() bool {
+	if i == nil {
+		return false
+	}
 	v, err := i.Indication()
 	if err != nil {
 		return false

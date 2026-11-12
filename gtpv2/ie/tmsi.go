@@ -11,6 +11,9 @@ func NewTMSI(tmsi uint32) *IE {
 
 // TMSI returns TMSI in uint32 if the type of IE matches.
 func (i *IE) TMSI() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	switch i.Type {
 	case TMSI:
 		return i.ValueAsUint32()
@@ -22,6 +25,9 @@ func (i *IE) TMSI() (uint32, error) {
 // MustTMSI returns TMSI in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustTMSI() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.TMSI()
 	return v
 }

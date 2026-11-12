@@ -11,6 +11,9 @@ func NewPacketTMSI(ptmsi uint32) *IE {
 
 // PacketTMSI returns PacketTMSI value in uint32 if type matches.
 func (i *IE) PacketTMSI() (uint32, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != PacketTMSI {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -20,6 +23,9 @@ func (i *IE) PacketTMSI() (uint32, error) {
 // MustPacketTMSI returns PacketTMSI in uint32, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustPacketTMSI() uint32 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.PacketTMSI()
 	return v
 }

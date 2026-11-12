@@ -27,24 +27,7 @@ func NewUpdatePDNConnectionSetRequest(teid, seq uint32, ies ...*ie.IE) *UpdatePD
 	}
 
 	for _, i := range ies {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.FullyQualifiedCSID:
-			switch i.Instance() {
-			case 0:
-				m.MMEFQCSID = i
-			case 1:
-				m.SGWFQCSID = i
-			default:
-				m.AdditionalIEs = append(m.AdditionalIEs, i)
-			}
-		case ie.PrivateExtension:
-			m.PrivateExtension = i
-		default:
-			m.AdditionalIEs = append(m.AdditionalIEs, i)
-		}
+		m.addIE(i)
 	}
 
 	m.SetLength()
@@ -62,41 +45,45 @@ func (m *UpdatePDNConnectionSetRequest) Marshal() ([]byte, error) {
 
 // MarshalTo serializes UpdatePDNConnectionSetRequest into bytes.
 func (m *UpdatePDNConnectionSetRequest) MarshalTo(b []byte) error {
-	if m.Header.Payload != nil {
-		m.Header.Payload = nil
+	if m == nil || m.Header == nil {
+		return ErrNilMessage
 	}
+	if err := m.Header.validate(MsgTypeUpdatePDNConnectionSetRequest, m.MarshalLen()); err != nil {
+		return err
+	}
+	if len(b) < m.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	m.Header.Payload = nil
 	m.Header.Payload = make([]byte, m.MarshalLen()-m.Header.MarshalLen())
-
 	offset := 0
-	if ie := m.MMEFQCSID; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
+	if i := m.MMEFQCSID; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "MMEFQCSID", iePair{ie.FullyQualifiedCSID, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := m.SGWFQCSID; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
+	if i := m.SGWFQCSID; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "SGWFQCSID", iePair{ie.FullyQualifiedCSID, 1}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	if ie := m.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
+	if i := m.PrivateExtension; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "PrivateExtension", iePair{ie.PrivateExtension, 255}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
-	for _, ie := range m.AdditionalIEs {
-		if ie == nil {
+	for _, i := range m.AdditionalIEs {
+		if i == nil {
 			continue
 		}
-		if err := ie.MarshalTo(m.Header.Payload[offset:]); err != nil {
+		if err := i.MarshalTo(m.Payload[offset:]); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
 	m.Header.SetLength()
 	return m.Header.MarshalTo(b)
 }
@@ -105,6 +92,9 @@ func (m *UpdatePDNConnectionSetRequest) MarshalTo(b []byte) error {
 func ParseUpdatePDNConnectionSetRequest(b []byte) (*UpdatePDNConnectionSetRequest, error) {
 	m := &UpdatePDNConnectionSetRequest{}
 	if err := m.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return m, err
+		}
 		return nil, err
 	}
 	return m, nil
@@ -112,69 +102,53 @@ func ParseUpdatePDNConnectionSetRequest(b []byte) (*UpdatePDNConnectionSetReques
 
 // UnmarshalBinary decodes given bytes as UpdatePDNConnectionSetRequest.
 func (m *UpdatePDNConnectionSetRequest) UnmarshalBinary(b []byte) error {
-	var err error
-	m.Header, err = ParseHeader(b)
+	if m == nil {
+		return ErrNilMessage
+	}
+	*m = UpdatePDNConnectionSetRequest{}
+	h, err := ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(m.Header.Payload) < 2 {
-		return nil
+	if h.Type != MsgTypeUpdatePDNConnectionSetRequest {
+		return &UnexpectedTypeError{Expected: MsgTypeUpdatePDNConnectionSetRequest, Actual: h.Type}
 	}
-
-	decodedIEs, err := ie.ParseMultiIEs(m.Header.Payload)
+	m.Header = h
+	decodedIEs, err := parseMessageIEs(h)
 	if err != nil {
 		return err
 	}
-	for _, i := range decodedIEs {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.FullyQualifiedCSID:
-			switch i.Instance() {
-			case 0:
-				m.MMEFQCSID = i
-			case 1:
-				m.SGWFQCSID = i
-			default:
-				m.AdditionalIEs = append(m.AdditionalIEs, i)
-			}
-		case ie.PrivateExtension:
-			m.PrivateExtension = i
-		default:
-			m.AdditionalIEs = append(m.AdditionalIEs, i)
-		}
-	}
-
-	return nil
+	return addDecodedIEs(h, decodedIEs, m.addIE)
 }
 
 // MarshalLen returns the serial length in int.
 func (m *UpdatePDNConnectionSetRequest) MarshalLen() int {
+	if m == nil || m.Header == nil {
+		return 0
+	}
 	l := m.Header.MarshalLen() - len(m.Header.Payload)
-
-	if ie := m.MMEFQCSID; ie != nil {
-		l += ie.MarshalLen()
+	if i := m.MMEFQCSID; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := m.SGWFQCSID; ie != nil {
-		l += ie.MarshalLen()
+	if i := m.SGWFQCSID; i != nil {
+		l += i.MarshalLen()
 	}
-	if ie := m.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
+	if i := m.PrivateExtension; i != nil {
+		l += i.MarshalLen()
 	}
-
-	for _, ie := range m.AdditionalIEs {
-		if ie == nil {
-			continue
+	for _, i := range m.AdditionalIEs {
+		if i != nil {
+			l += i.MarshalLen()
 		}
-		l += ie.MarshalLen()
 	}
 	return l
 }
 
 // SetLength sets the length in Length field.
 func (m *UpdatePDNConnectionSetRequest) SetLength() {
-	m.Header.Length = uint16(m.MarshalLen() - 4)
+	if m != nil && m.Header != nil {
+		m.Header.setLength(m.MarshalLen() - m.Header.piggybackLen() - 4)
+	}
 }
 
 // MessageTypeName returns the name of protocol.
@@ -184,5 +158,91 @@ func (m *UpdatePDNConnectionSetRequest) MessageTypeName() string {
 
 // TEID returns the TEID in uint32.
 func (m *UpdatePDNConnectionSetRequest) TEID() uint32 {
+	if m == nil {
+		return 0
+	}
 	return m.Header.teid()
+}
+
+func (m *UpdatePDNConnectionSetRequest) GetHeader() *Header {
+	if m == nil {
+		return nil
+	}
+	return m.Header
+}
+
+// TS 29.274 Table 7.9.3-1: identify IEs by type and instance; §7.7.10: keep the first singleton.
+func (m *UpdatePDNConnectionSetRequest) addIE(i *ie.IE) {
+	if i == nil {
+		return
+	}
+	if err := i.Err(); err != nil {
+		m.Header.err = err
+	}
+	switch i.Type {
+	case ie.FullyQualifiedCSID:
+		switch i.Instance() {
+		case 0:
+			if m.MMEFQCSID == nil {
+				m.MMEFQCSID = i
+			}
+		case 1:
+			if m.SGWFQCSID == nil {
+				m.SGWFQCSID = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.PrivateExtension:
+		if m.PrivateExtension == nil {
+			m.PrivateExtension = i
+		} else if m.PrivateExtension.Instance() != i.Instance() {
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	default:
+		m.AdditionalIEs = append(m.AdditionalIEs, i)
+	}
+}
+
+// Version reads the common header, returning zero for a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) Version() int { return m.GetHeader().Version() }
+
+// MessageType reads the common header, returning zero for a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) MessageType() uint8 { return m.GetHeader().MessageType() }
+
+// Sequence reads the common header, returning zero for a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) Sequence() uint32 { return m.GetHeader().Sequence() }
+
+// IsPiggybacking reads the common header, returning zero for a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) IsPiggybacking() bool { return m.GetHeader().IsPiggybacking() }
+
+// HasTEID reads the common header, returning zero for a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) HasTEID() bool { return m.GetHeader().HasTEID() }
+
+// HasMessagePriority reads the common header, returning zero for a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) HasMessagePriority() bool {
+	return m.GetHeader().HasMessagePriority()
+}
+
+// MessagePriority reads the common header, returning zero for a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) MessagePriority() uint8 {
+	return m.GetHeader().MessagePriority()
+}
+
+// SetSequenceNumber updates the common header safely on a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) SetSequenceNumber(seq uint32) error {
+	return m.GetHeader().SetSequenceNumber(seq)
+}
+
+// SetMessagePriority updates the common header safely on a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) SetMessagePriority(priority uint8) error {
+	return m.GetHeader().SetMessagePriority(priority)
+}
+
+// SetTEID updates the common header safely on a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) SetTEID(teid uint32) { m.GetHeader().SetTEID(teid) }
+
+// SetPiggybacking updates the common header safely on a nil receiver.
+func (m *UpdatePDNConnectionSetRequest) SetPiggybacking(value uint8) {
+	m.GetHeader().SetPiggybacking(value)
 }

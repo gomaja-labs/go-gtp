@@ -25,8 +25,8 @@ func TestDownlinkDataNotification(t *testing.T) {
 				ie.NewIMSI("123451234567890"),
 				ie.NewFullyQualifiedTEID(gtpv2.IFTypeS4SGSNGTPU, 0xffffffff, "1.1.1.1", ""),
 				ie.NewIndicationFromOctets(0xa1, 0x08),
-				ie.NewPagingAndServiceInformation(5, 0x01, 0xff),
-				ie.NewIntegerNumber(2020),
+				ie.NewPagingAndServiceInformation(5, 0x01, 0x3f),
+				ie.NewIntegerNumber(2020, 2),
 			),
 			Serialized: []byte{
 				// Header
@@ -43,8 +43,8 @@ func TestDownlinkDataNotification(t *testing.T) {
 				0x57, 0x00, 0x09, 0x00, 0x8f, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01,
 				// Indication
 				0x4d, 0x00, 0x02, 0x00, 0xa1, 0x08,
-				// PagingAndServiceInformation
-				0xba, 0x00, 0x03, 0x00, 0x05, 0x01, 0x7f,
+				// TS 29.274 Figure 8.117-1: PPI present, value 63.
+				0xba, 0x00, 0x03, 0x00, 0x05, 0x01, 0x3f,
 				// DLDataPacketSize
 				0xbb, 0x00, 0x02, 0x00, 0x07, 0xe4,
 			},

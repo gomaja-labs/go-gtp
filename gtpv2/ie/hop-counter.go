@@ -11,6 +11,9 @@ func NewHopCounter(hop uint8) *IE {
 
 // HopCounter returns HopCounter in uint8 if the type of IE matches.
 func (i *IE) HopCounter() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != HopCounter {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -20,6 +23,9 @@ func (i *IE) HopCounter() (uint8, error) {
 // MustHopCounter returns HopCounter in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustHopCounter() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.HopCounter()
 	return v
 }

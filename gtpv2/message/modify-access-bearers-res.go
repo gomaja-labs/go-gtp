@@ -30,32 +30,7 @@ func NewModifyAccessBearersResponse(teid, seq uint32, ies ...*ie.IE) *ModifyAcce
 	}
 
 	for _, i := range ies {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.Cause:
-			m.Cause = i
-		case ie.BearerContext:
-			switch i.Instance() {
-			case 0:
-				m.BearerContextsModified = append(m.BearerContextsModified, i)
-			case 1:
-				m.BearerContextsMarkedForRemoval = append(m.BearerContextsMarkedForRemoval, i)
-			}
-		case ie.Recovery:
-			m.Recovery = i
-		case ie.Indication:
-			m.IndicationFlags = i
-		case ie.LoadControlInformation:
-			m.SGWNodeLoadControlInformation = i
-		case ie.OverloadControlInformation:
-			m.SGWOverloadControlInformation = i
-		case ie.PrivateExtension:
-			m.PrivateExtension = i
-		default:
-			m.AdditionalIEs = append(m.AdditionalIEs, i)
-		}
+		m.addIE(i)
 	}
 
 	m.SetLength()
@@ -73,71 +48,81 @@ func (m *ModifyAccessBearersResponse) Marshal() ([]byte, error) {
 
 // MarshalTo serializes ModifyAccessBearersResponse into bytes.
 func (m *ModifyAccessBearersResponse) MarshalTo(b []byte) error {
-	if m.Header.Payload != nil {
-		m.Header.Payload = nil
+	if m == nil || m.Header == nil {
+		return ErrNilMessage
 	}
+	if err := m.Header.validate(MsgTypeModifyAccessBearersResponse, m.MarshalLen()); err != nil {
+		return err
+	}
+	if len(b) < m.MarshalLen() {
+		return ErrTooShortToMarshal
+	}
+	m.Header.Payload = nil
 	m.Header.Payload = make([]byte, m.MarshalLen()-m.Header.MarshalLen())
-
 	offset := 0
-	if ie := m.Cause; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
+	if i := m.Cause; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "Cause", iePair{ie.Cause, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-	for _, ie := range m.BearerContextsModified {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	for _, ie := range m.BearerContextsMarkedForRemoval {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := m.Recovery; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := m.IndicationFlags; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := m.SGWNodeLoadControlInformation; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := m.SGWOverloadControlInformation; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-	if ie := m.PrivateExtension; ie != nil {
-		if err := ie.MarshalTo(m.Payload[offset:]); err != nil {
-			return err
-		}
-		offset += ie.MarshalLen()
-	}
-
-	for _, ie := range m.AdditionalIEs {
-		if ie == nil {
+	for _, i := range m.BearerContextsModified {
+		if i == nil {
 			continue
 		}
-		if err := ie.MarshalTo(m.Header.Payload[offset:]); err != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "BearerContextsModified", iePair{ie.BearerContext, 0}); err != nil {
 			return err
 		}
-		offset += ie.MarshalLen()
+		offset += i.MarshalLen()
 	}
-
+	for _, i := range m.BearerContextsMarkedForRemoval {
+		if i == nil {
+			continue
+		}
+		if err := marshalNamedIE(i, m.Payload[offset:], "BearerContextsMarkedForRemoval", iePair{ie.BearerContext, 1}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := m.Recovery; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "Recovery", iePair{ie.Recovery, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := m.IndicationFlags; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "IndicationFlags", iePair{ie.Indication, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := m.SGWNodeLoadControlInformation; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "SGWNodeLoadControlInformation", iePair{ie.LoadControlInformation, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := m.SGWOverloadControlInformation; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "SGWOverloadControlInformation", iePair{ie.OverloadControlInformation, 0}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	if i := m.PrivateExtension; i != nil {
+		if err := marshalNamedIE(i, m.Payload[offset:], "PrivateExtension", iePair{ie.PrivateExtension, 255}); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
+	for _, i := range m.AdditionalIEs {
+		if i == nil {
+			continue
+		}
+		if err := i.MarshalTo(m.Payload[offset:]); err != nil {
+			return err
+		}
+		offset += i.MarshalLen()
+	}
 	m.Header.SetLength()
 	return m.Header.MarshalTo(b)
 }
@@ -146,6 +131,9 @@ func (m *ModifyAccessBearersResponse) MarshalTo(b []byte) error {
 func ParseModifyAccessBearersResponse(b []byte) (*ModifyAccessBearersResponse, error) {
 	m := &ModifyAccessBearersResponse{}
 	if err := m.UnmarshalBinary(b); err != nil {
+		if isIEContentError(err) {
+			return m, err
+		}
 		return nil, err
 	}
 	return m, nil
@@ -153,91 +141,72 @@ func ParseModifyAccessBearersResponse(b []byte) (*ModifyAccessBearersResponse, e
 
 // UnmarshalBinary decodes given bytes as ModifyAccessBearersResponse.
 func (m *ModifyAccessBearersResponse) UnmarshalBinary(b []byte) error {
-	var err error
-	m.Header, err = ParseHeader(b)
+	if m == nil {
+		return ErrNilMessage
+	}
+	*m = ModifyAccessBearersResponse{}
+	h, err := ParseHeader(b)
 	if err != nil {
 		return err
 	}
-	if len(m.Header.Payload) < 2 {
-		return nil
+	if h.Type != MsgTypeModifyAccessBearersResponse {
+		return &UnexpectedTypeError{Expected: MsgTypeModifyAccessBearersResponse, Actual: h.Type}
 	}
-
-	decodedIEs, err := ie.ParseMultiIEs(m.Header.Payload)
+	m.Header = h
+	decodedIEs, err := parseMessageIEs(h)
 	if err != nil {
 		return err
 	}
-	for _, i := range decodedIEs {
-		if i == nil {
-			continue
-		}
-		switch i.Type {
-		case ie.Cause:
-			m.Cause = i
-		case ie.BearerContext:
-			switch i.Instance() {
-			case 0:
-				m.BearerContextsModified = append(m.BearerContextsModified, i)
-			case 1:
-				m.BearerContextsMarkedForRemoval = append(m.BearerContextsMarkedForRemoval, i)
-			}
-		case ie.Recovery:
-			m.Recovery = i
-		case ie.Indication:
-			m.IndicationFlags = i
-		case ie.LoadControlInformation:
-			m.SGWNodeLoadControlInformation = i
-		case ie.OverloadControlInformation:
-			m.SGWOverloadControlInformation = i
-		case ie.PrivateExtension:
-			m.PrivateExtension = i
-		default:
-			m.AdditionalIEs = append(m.AdditionalIEs, i)
-		}
-	}
-
-	return nil
+	return addDecodedIEs(h, decodedIEs, m.addIE)
 }
 
 // MarshalLen returns the serial length in int.
 func (m *ModifyAccessBearersResponse) MarshalLen() int {
+	if m == nil || m.Header == nil {
+		return 0
+	}
 	l := m.Header.MarshalLen() - len(m.Header.Payload)
-	if ie := m.Cause; ie != nil {
-		l += ie.MarshalLen()
+	if i := m.Cause; i != nil {
+		l += i.MarshalLen()
 	}
-	for _, ie := range m.BearerContextsModified {
-		l += ie.MarshalLen()
-	}
-	for _, ie := range m.BearerContextsMarkedForRemoval {
-		l += ie.MarshalLen()
-	}
-	if ie := m.Recovery; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := m.IndicationFlags; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := m.SGWNodeLoadControlInformation; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := m.SGWOverloadControlInformation; ie != nil {
-		l += ie.MarshalLen()
-	}
-	if ie := m.PrivateExtension; ie != nil {
-		l += ie.MarshalLen()
-	}
-
-	for _, ie := range m.AdditionalIEs {
-		if ie == nil {
-			continue
+	for _, i := range m.BearerContextsModified {
+		if i != nil {
+			l += i.MarshalLen()
 		}
-		l += ie.MarshalLen()
+	}
+	for _, i := range m.BearerContextsMarkedForRemoval {
+		if i != nil {
+			l += i.MarshalLen()
+		}
+	}
+	if i := m.Recovery; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := m.IndicationFlags; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := m.SGWNodeLoadControlInformation; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := m.SGWOverloadControlInformation; i != nil {
+		l += i.MarshalLen()
+	}
+	if i := m.PrivateExtension; i != nil {
+		l += i.MarshalLen()
+	}
+	for _, i := range m.AdditionalIEs {
+		if i != nil {
+			l += i.MarshalLen()
+		}
 	}
 	return l
 }
 
 // SetLength sets the length in Length field.
 func (m *ModifyAccessBearersResponse) SetLength() {
-	m.Header.Length = uint16(m.MarshalLen() - 4)
+	if m != nil && m.Header != nil {
+		m.Header.setLength(m.MarshalLen() - m.Header.piggybackLen() - 4)
+	}
 }
 
 // MessageTypeName returns the name of protocol.
@@ -247,5 +216,130 @@ func (m *ModifyAccessBearersResponse) MessageTypeName() string {
 
 // TEID returns the TEID in uint32.
 func (m *ModifyAccessBearersResponse) TEID() uint32 {
+	if m == nil {
+		return 0
+	}
 	return m.Header.teid()
+}
+
+func (m *ModifyAccessBearersResponse) GetHeader() *Header {
+	if m == nil {
+		return nil
+	}
+	return m.Header
+}
+
+// TS 29.274 Table 7.2.25-1: identify IEs by type and instance; §7.7.10: keep the first singleton.
+func (m *ModifyAccessBearersResponse) addIE(i *ie.IE) {
+	if i == nil {
+		return
+	}
+	if err := i.Err(); err != nil {
+		m.Header.err = err
+	}
+	switch i.Type {
+	case ie.Cause:
+		switch i.Instance() {
+		case 0:
+			if m.Cause == nil {
+				m.Cause = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.BearerContext:
+		switch i.Instance() {
+		case 0:
+			m.BearerContextsModified = append(m.BearerContextsModified, i)
+		case 1:
+			m.BearerContextsMarkedForRemoval = append(m.BearerContextsMarkedForRemoval, i)
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.Recovery:
+		switch i.Instance() {
+		case 0:
+			if m.Recovery == nil {
+				m.Recovery = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.Indication:
+		switch i.Instance() {
+		case 0:
+			if m.IndicationFlags == nil {
+				m.IndicationFlags = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.LoadControlInformation:
+		switch i.Instance() {
+		case 0:
+			if m.SGWNodeLoadControlInformation == nil {
+				m.SGWNodeLoadControlInformation = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.OverloadControlInformation:
+		switch i.Instance() {
+		case 0:
+			if m.SGWOverloadControlInformation == nil {
+				m.SGWOverloadControlInformation = i
+			}
+		default:
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	case ie.PrivateExtension:
+		if m.PrivateExtension == nil {
+			m.PrivateExtension = i
+		} else if m.PrivateExtension.Instance() != i.Instance() {
+			m.AdditionalIEs = append(m.AdditionalIEs, i)
+		}
+	default:
+		m.AdditionalIEs = append(m.AdditionalIEs, i)
+	}
+}
+
+// Version reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersResponse) Version() int { return m.GetHeader().Version() }
+
+// MessageType reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersResponse) MessageType() uint8 { return m.GetHeader().MessageType() }
+
+// Sequence reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersResponse) Sequence() uint32 { return m.GetHeader().Sequence() }
+
+// IsPiggybacking reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersResponse) IsPiggybacking() bool { return m.GetHeader().IsPiggybacking() }
+
+// HasTEID reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersResponse) HasTEID() bool { return m.GetHeader().HasTEID() }
+
+// HasMessagePriority reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersResponse) HasMessagePriority() bool {
+	return m.GetHeader().HasMessagePriority()
+}
+
+// MessagePriority reads the common header, returning zero for a nil receiver.
+func (m *ModifyAccessBearersResponse) MessagePriority() uint8 { return m.GetHeader().MessagePriority() }
+
+// SetSequenceNumber updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersResponse) SetSequenceNumber(seq uint32) error {
+	return m.GetHeader().SetSequenceNumber(seq)
+}
+
+// SetMessagePriority updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersResponse) SetMessagePriority(priority uint8) error {
+	return m.GetHeader().SetMessagePriority(priority)
+}
+
+// SetTEID updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersResponse) SetTEID(teid uint32) { m.GetHeader().SetTEID(teid) }
+
+// SetPiggybacking updates the common header safely on a nil receiver.
+func (m *ModifyAccessBearersResponse) SetPiggybacking(value uint8) {
+	m.GetHeader().SetPiggybacking(value)
 }

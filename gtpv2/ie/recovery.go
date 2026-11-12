@@ -11,6 +11,9 @@ func NewRecovery(recovery uint8) *IE {
 
 // Recovery returns Recovery value if the type of IE matches.
 func (i *IE) Recovery() (uint8, error) {
+	if err := i.Err(); err != nil {
+		return 0, err
+	}
 	if i.Type != Recovery {
 		return 0, &InvalidTypeError{Type: i.Type}
 	}
@@ -20,6 +23,9 @@ func (i *IE) Recovery() (uint8, error) {
 // MustRecovery returns Recovery in uint8, ignoring errors.
 // This should only be used if it is assured to have the value.
 func (i *IE) MustRecovery() uint8 {
+	if i == nil {
+		return 0
+	}
 	v, _ := i.Recovery()
 	return v
 }
