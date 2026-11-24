@@ -125,8 +125,7 @@ func (f *PDNAddressAllocationFields) MarshalTo(b []byte) error {
 	if (f.PDNType == 1 || f.PDNType == 3) && f.IPv4Address.To4() == nil {
 		return ErrMalformed
 	}
-	// TS 29.274 §8.14: PAA has a fixed /64 IPv6 prefix.
-	if (f.PDNType == 2 || f.PDNType == 3) && (f.IPv6PrefixLength != 64 || f.IPv6Address.To16() == nil || f.IPv6Address.To4() != nil) {
+	if (f.PDNType == 2 || f.PDNType == 3) && !validPAAIPv6(f.IPv6Address, f.IPv6PrefixLength) {
 		return ErrMalformed
 	}
 	if len(b) < f.MarshalLen() {
@@ -220,10 +219,10 @@ func (f *PDNAddressAllocationFields) UnmarshalBinary(b []byte) error {
 		}
 
 		f.IPv6PrefixLength = b[offset]
-		if f.IPv6PrefixLength != 64 {
+		f.IPv6Address = b[offset+1 : offset+17]
+		if !validPAAIPv6(f.IPv6Address, f.IPv6PrefixLength) {
 			return ErrMalformed
 		}
-		f.IPv6Address = b[offset+1 : offset+17]
 
 		return nil
 	case pdnTypeIPv4v6:
@@ -232,10 +231,10 @@ func (f *PDNAddressAllocationFields) UnmarshalBinary(b []byte) error {
 		}
 
 		f.IPv6PrefixLength = b[offset]
-		if f.IPv6PrefixLength != 64 {
+		f.IPv6Address = b[offset+1 : offset+17]
+		if !validPAAIPv6(f.IPv6Address, f.IPv6PrefixLength) {
 			return ErrMalformed
 		}
-		f.IPv6Address = b[offset+1 : offset+17]
 		f.IPv4Address = b[offset+17 : offset+21]
 
 		return nil
@@ -244,6 +243,13 @@ func (f *PDNAddressAllocationFields) UnmarshalBinary(b []byte) error {
 	default:
 		return nil
 	}
+}
+
+// TS 29.274 V20.0.0 §8.14 requires /64 for an assigned prefix. The initial
+// request's dynamic IPv6 address is all zero, including its prefix length
+// (§7.2.1 Table 7.2.1-1, PAA row).
+func validPAAIPv6(ip net.IP, prefix uint8) bool {
+	return ip.To16() != nil && ip.To4() == nil && (prefix == 64 || prefix == 0 && ip.IsUnspecified())
 }
 
 // MarshalLen returns the serial length of PDNAddressAllocationFields in int.

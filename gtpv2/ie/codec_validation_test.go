@@ -245,6 +245,7 @@ func TestPAAFixedIPv6Prefix(t *testing.T) {
 		raw := make([]byte, 18)
 		raw[0] = 2
 		raw[1] = prefix
+		raw[17] = 1 // An assigned address cannot use the dynamic-request prefix length.
 		if _, err := ParsePDNAddressAllocationFields(raw); err == nil {
 			t.Errorf("received PAA prefix %d accepted", prefix)
 		}
